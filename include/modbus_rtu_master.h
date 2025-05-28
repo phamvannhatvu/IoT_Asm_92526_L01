@@ -35,7 +35,7 @@ class ModbusMaster {
         HardwareSerial* serial;
         uint8_t rxBuffer[MODBUS_MAX_BUFFER];
         uint8_t txBuffer[MODBUS_MAX_BUFFER];
-        unsigned long timeout;
+        uint32_t timeout;
         
         // Utility functions
         uint16_t calculateCRC(uint8_t* buffer, uint16_t length);
@@ -48,8 +48,8 @@ class ModbusMaster {
         ModbusMaster(HardwareSerial* serialPort);
         
         // Configuration
-        void begin(unsigned long baud);
-        void setTimeout(unsigned long timeoutMs);
+        void begin(uint32_t baud, uint16_t TX, uint16_t RX);
+        void setTimeout(uint32_t timeoutMs);
         
         // Read functions
         uint8_t readHoldingRegisters(uint8_t slaveId, uint16_t address, 

@@ -10,11 +10,11 @@ ModbusMaster::ModbusMaster(HardwareSerial* serialPort) {
     timeout = MODBUS_TIMEOUT_MS;
 }
 
-void ModbusMaster::begin(unsigned long baud) {
-    serial->begin(baud);
+void ModbusMaster::begin(uint32_t baud, uint16_t TX, uint16_t RX) {
+    serial->begin(baud, SERIAL_8N1, TX, RX);
 }
 
-void ModbusMaster::setTimeout(unsigned long timeoutMs) {
+void ModbusMaster::setTimeout(uint32_t timeoutMs) {
     timeout = timeoutMs;
 }
 

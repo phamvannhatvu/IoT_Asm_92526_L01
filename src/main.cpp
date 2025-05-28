@@ -4,12 +4,12 @@
 #include "DHT20.h"
 #include "Wire.h"
 #include <ArduinoOTA.h>
-#include "shct3.h"
+#include "shtc3.h"
 
-constexpr char WIFI_SSID[] = "nhatvu";
-constexpr char WIFI_PASSWORD[] = "25122003";
+constexpr char WIFI_SSID[] = "Oreki";
+constexpr char WIFI_PASSWORD[] = "hardware";
 
-constexpr char TOKEN[] = "4x90UVdd7A8KEfUgvxLL";
+constexpr char TOKEN[] = "I6CQCDQxVfWAU2uezJeZ";
 
 constexpr char THINGSBOARD_SERVER[] = "app.coreiot.io";
 constexpr uint16_t THINGSBOARD_PORT = 1883U;
@@ -28,6 +28,7 @@ Arduino_MQTT_Client mqttClient(wifiClient);
 ThingsBoard tb(mqttClient, MAX_MESSAGE_SIZE);
 
 DHT20 dht20;
+SHTC3 shtc3(&Serial2, 16, 17, 1, SERIAL_MODBUS_BAUD);
 
 void InitWiFi() {
   Serial.println("Connecting to AP ...");
@@ -100,24 +101,44 @@ void TaskReadAndSendTelemetryData(void *pvParameters) {
   }
 }
 
-SHCT3 shct3;
+void TaskSHTC3Read(void *pvParameters) {
+  while(1) {
+    // float humidity = shtc3.getHumidity();
+    float humidity = 50; // For testing purposes, replace with actual sensor reading
+    float temperature = shtc3.getTemperature();
+
+    if (humidity != 0 && temperature != 0) {
+      Serial.print("SHTC3 Humidity: ");
+      Serial.print(humidity);
+      Serial.println("%");
+      Serial.print("SHTC3 Temperature: ");
+      Serial.print(temperature);
+      Serial.println(" °C");
+
+      tb.sendTelemetryData("humidity", humidity);
+      tb.sendTelemetryData("temperature", temperature);
+    } else {
+      Serial.println("Failed to read from SHTC3 sensor!");
+    }
+    vTaskDelay(pdMS_TO_TICKS(5000));
+  }
+}
 
 void setup() {
   Serial.begin(SERIAL_DEBUG_BAUD);
-  Serial2.begin(9600, SERIAL_8N1, 16, 17); // RX, TX pins for Serial2
+  // Serial2.begin(9600, SERIAL_8N1, 16, 17); // RX, TX pins for Serial2
   // shct3 = SHCT3(&Serial2, 1, SERIAL_MODBUS_BAUD);
   delay(1000);
-  // InitWiFi();
+  InitWiFi();
 
-  // Wire.begin();
-  // dht20.begin();
+  Wire.begin();
+  dht20.begin();
   
-  // xTaskCreate(TaskCheckWiFiConnection, "Check WiFi connection", 2048, NULL, 2, NULL);
-  // xTaskCreate(TaskCheckTBConnection, "Check Thingsboard connection", 2048, NULL, 2, NULL);
+  xTaskCreate(TaskSHTC3Read, "SHTC3 Read Task", 2048, NULL, 1, NULL);
+  xTaskCreate(TaskCheckWiFiConnection, "Check WiFi connection", 2048, NULL, 2, NULL);
+  xTaskCreate(TaskCheckTBConnection, "Check Thingsboard connection", 2048, NULL, 2, NULL);
   // xTaskCreate(TaskReadAndSendTelemetryData, "Read and send telemetry data", 2048, NULL, 2, NULL);
 }
 
 void loop() {
-  Serial2.write('a');
-  delay(1000);
 }

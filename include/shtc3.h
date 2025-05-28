@@ -1,5 +1,5 @@
-#ifndef SHCT3_H
-#define SHCT3_H
+#ifndef SHTC3_H
+#define SHTC3_H
 
 #include <Arduino.h>
 #include <HardwareSerial.h>
@@ -17,25 +17,25 @@
 #define DEFAULT_SLAVE_ID 1
 #define DEFAULT_BAUDRATE 4800U
 
-class SHCT3 {
+class SHTC3 {
     private:
         ModbusMaster modbus;
         uint8_t slaveID;
         uint32_t baudrate;
         HardwareSerial* serialPort;
-        uint16_t humidityValue;
-        uint16_t temperatureValue;
+        float humidityValue;
+        float temperatureValue;
 
     public:
-        SHCT3();
-        SHCT3(HardwareSerial* serialPort);
-        SHCT3(HardwareSerial* serialPort, uint8_t slaveID, uint32_t baudrate);
+        // SHTC3();
+        SHTC3(HardwareSerial* serialPort, uint16_t TX, uint16_t RX);
+        SHTC3(HardwareSerial* serialPort, uint16_t TX, uint16_t RX, uint8_t slaveID, uint32_t baudrate);
         
         void setSlaveID(uint8_t slaveID);
         void setBaudrate(uint32_t baudrate);
         
-        uint16_t getHumidity();
-        uint16_t getTemperature();
+        float getHumidity();
+        float getTemperature();
 };
 
-#endif // SHCT3_H
+#endif // SHTC3_H
