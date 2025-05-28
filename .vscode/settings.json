@@ -7,5 +7,6 @@
     "files.associations": {
         "cmath": "cpp",
         "array": "cpp"
-    }
+    },
+    "cmake.sourceDirectory": "D:/HCMUT/IoT/IoT_Asm/lib/ArduinoJson/src"
 }
