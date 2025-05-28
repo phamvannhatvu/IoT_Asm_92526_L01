@@ -1,14 +1,16 @@
 #include <WiFi.h>
 #include <Arduino_MQTT_Client.h>
 #include <ThingsBoard.h>
-#include "DHT20.h"
-#include "Wire.h"
+#include "temp_humid.h"
+#include "light.h"
+#include "water_pump.h"
 #include <ArduinoOTA.h>
+#include <esp_smartconfig.h>
 
-constexpr char WIFI_SSID[] = "nhatvu";
+constexpr char WIFI_SSID[] = "MSI";
 constexpr char WIFI_PASSWORD[] = "25122003";
 
-constexpr char TOKEN[] = "4x90UVdd7A8KEfUgvxLL";
+constexpr char TOKEN[] = "gd63iniu7du1xm4zetoh";
 
 constexpr char THINGSBOARD_SERVER[] = "app.coreiot.io";
 constexpr uint16_t THINGSBOARD_PORT = 1883U;
@@ -21,11 +23,16 @@ constexpr uint16_t SEND_TELEMETRY_INTERVAL_MS = 1000U;
 constexpr uint32_t SERIAL_DEBUG_BAUD = 9600U;
 constexpr uint16_t MAX_MESSAGE_SIZE = 1024U;
 
+#define WATER_PUMP_PIN 14
+#define LIGHT_SENSOR_PIN 36
+
 WiFiClient wifiClient;
 Arduino_MQTT_Client mqttClient(wifiClient);
 ThingsBoard tb(mqttClient, MAX_MESSAGE_SIZE);
 
-DHT20 dht20;
+TempHumidSensor tempHumidSensor;
+LightSensor lightSensor;
+WaterPump waterPump;
 
 void InitWiFi() {
   Serial.println("Connecting to AP ...");
@@ -77,10 +84,12 @@ void TaskCheckTBConnection(void *pvParameters) {
 
 void TaskReadAndSendTelemetryData(void *pvParameters) {
   while(1) {
-    // dht20.read();
     
+    // Humidity and temperature
     float temperature = 25;//dht20.getTemperature();
     float humidity = 50;//dht20.getHumidity();
+
+    tempHumidSensor.get_value(temperature, humidity);
 
     if (isnan(temperature) || isnan(humidity)) {
       Serial.println("Failed to read from DHT20 sensor!");
@@ -94,6 +103,16 @@ void TaskReadAndSendTelemetryData(void *pvParameters) {
       tb.sendTelemetryData("temperature", temperature);
       tb.sendTelemetryData("humidity", humidity);
     }
+
+    // Brightness
+    uint32_t brightness = lightSensor.getBrightness();
+    Serial.print("Brightness: ");
+    Serial.println(brightness);
+    tb.sendTelemetryData("brightness", brightness);
+
+    // Water pump control
+    waterPump.pump(brightness / 4095.0 * 255);
+
     vTaskDelay(pdMS_TO_TICKS(SEND_TELEMETRY_INTERVAL_MS));
   }
 }
@@ -102,9 +121,9 @@ void setup() {
   Serial.begin(SERIAL_DEBUG_BAUD);
   delay(1000);
   InitWiFi();
-
-  Wire.begin();
-  dht20.begin();
+  tempHumidSensor.begin();
+  lightSensor.begin(LIGHT_SENSOR_PIN);
+  waterPump.begin(WATER_PUMP_PIN);
   
   xTaskCreate(TaskCheckWiFiConnection, "Check WiFi connection", 2048, NULL, 2, NULL);
   xTaskCreate(TaskCheckTBConnection, "Check Thingsboard connection", 2048, NULL, 2, NULL);
