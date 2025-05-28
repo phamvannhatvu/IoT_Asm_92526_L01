@@ -4,6 +4,7 @@
 #include "DHT20.h"
 #include "Wire.h"
 #include <ArduinoOTA.h>
+#include "shct3.h"
 
 constexpr char WIFI_SSID[] = "nhatvu";
 constexpr char WIFI_PASSWORD[] = "25122003";
@@ -19,6 +20,7 @@ constexpr uint16_t TB_CONNECT_CHECKING_INTERVAL_MS = 10000U;
 constexpr uint16_t TB_LOOP_INTERVAL_MS = 10U;
 constexpr uint16_t SEND_TELEMETRY_INTERVAL_MS = 1000U;
 constexpr uint32_t SERIAL_DEBUG_BAUD = 9600U;
+constexpr uint32_t SERIAL_MODBUS_BAUD = 4800U;
 constexpr uint16_t MAX_MESSAGE_SIZE = 1024U;
 
 WiFiClient wifiClient;
@@ -98,19 +100,24 @@ void TaskReadAndSendTelemetryData(void *pvParameters) {
   }
 }
 
+SHCT3 shct3;
+
 void setup() {
   Serial.begin(SERIAL_DEBUG_BAUD);
+  Serial2.begin(9600, SERIAL_8N1, 16, 17); // RX, TX pins for Serial2
+  // shct3 = SHCT3(&Serial2, 1, SERIAL_MODBUS_BAUD);
   delay(1000);
-  InitWiFi();
+  // InitWiFi();
 
-  Wire.begin();
-  dht20.begin();
+  // Wire.begin();
+  // dht20.begin();
   
-  xTaskCreate(TaskCheckWiFiConnection, "Check WiFi connection", 2048, NULL, 2, NULL);
-  xTaskCreate(TaskCheckTBConnection, "Check Thingsboard connection", 2048, NULL, 2, NULL);
-  xTaskCreate(TaskReadAndSendTelemetryData, "Read and send telemetry data", 2048, NULL, 2, NULL);
+  // xTaskCreate(TaskCheckWiFiConnection, "Check WiFi connection", 2048, NULL, 2, NULL);
+  // xTaskCreate(TaskCheckTBConnection, "Check Thingsboard connection", 2048, NULL, 2, NULL);
+  // xTaskCreate(TaskReadAndSendTelemetryData, "Read and send telemetry data", 2048, NULL, 2, NULL);
 }
 
 void loop() {
-  
+  Serial2.write('a');
+  delay(1000);
 }
