@@ -4,11 +4,12 @@
 #include "DHT20.h"
 #include "Wire.h"
 #include <ArduinoOTA.h>
+#include "scheduler.h"
 
-constexpr char WIFI_SSID[] = "nhatvu";
-constexpr char WIFI_PASSWORD[] = "25122003";
+constexpr char WIFI_SSID[] = "Oreki";
+constexpr char WIFI_PASSWORD[] = "hardware";
 
-constexpr char TOKEN[] = "4x90UVdd7A8KEfUgvxLL";
+constexpr char TOKEN[] = "I6CQCDQxVfWAU2uezJeZ";
 
 constexpr char THINGSBOARD_SERVER[] = "app.coreiot.io";
 constexpr uint16_t THINGSBOARD_PORT = 1883U;
@@ -21,12 +22,56 @@ constexpr uint16_t SEND_TELEMETRY_INTERVAL_MS = 1000U;
 constexpr uint32_t SERIAL_DEBUG_BAUD = 9600U;
 constexpr uint16_t MAX_MESSAGE_SIZE = 1024U;
 
+// Scheduler
+constexpr char WATERING_INTERVAL_ATTR[] = "wateringInterval";
+constexpr char WATERING_MODE_ATTR[] = "wateringMode";
+constexpr char WATERING_STATE_ATTR[] = "wateringState";
+
+volatile bool attributesChanged = false;
+volatile int wateringMode = 0;
+volatile bool wateringState = false;
+
+constexpr uint16_t WATERING_INTERVAL_MS_MIN = 10U;
+constexpr uint16_t WATERING_INTERVAL_MS_MAX = 60000U;
+volatile uint16_t wateringInterval = 1000U;
+
+uint32_t previousStateChange;
+
+constexpr int16_t telemetrySendInterval = 10000U;
+uint32_t previousDataSend;
+
+constexpr std::array<const char *, 2U> SHARED_ATTRIBUTES_LIST = {
+  WATERING_STATE_ATTR,
+  WATERING_INTERVAL_ATTR
+};
+
 WiFiClient wifiClient;
 Arduino_MQTT_Client mqttClient(wifiClient);
 ThingsBoard tb(mqttClient, MAX_MESSAGE_SIZE);
 
 DHT20 dht20;
 
+void processSharedAttributes(const Shared_Attribute_Data &data) {
+  for (auto it = data.begin(); it != data.end(); ++it) {
+    if (strcmp(it->key().c_str(), WATERING_INTERVAL_ATTR) == 0) {
+      const uint16_t new_interval = it->value().as<uint16_t>();
+      if (new_interval >= WATERING_INTERVAL_MS_MIN && new_interval <= WATERING_INTERVAL_MS_MAX) {
+        wateringInterval = new_interval;
+        Serial.print("Watering interval is set to: ");
+        Serial.println(new_interval);
+      }
+    } else if (strcmp(it->key().c_str(), WATERING_STATE_ATTR) == 0) {
+      wateringState = it->value().as<bool>();
+      // digitalWrite(LED_PIN, wateringState);
+      Serial.print("Watering state is set to: ");
+      Serial.println(wateringState);
+    }
+  }
+  attributesChanged = true;
+}
+
+const Shared_Attribute_Callback attributes_callback(&processSharedAttributes, SHARED_ATTRIBUTES_LIST.cbegin(), SHARED_ATTRIBUTES_LIST.cend());
+const Attribute_Request_Callback attribute_shared_request_callback(&processSharedAttributes, SHARED_ATTRIBUTES_LIST.cbegin(), SHARED_ATTRIBUTES_LIST.cend());
 void InitWiFi() {
   Serial.println("Connecting to AP ...");
   // Attempting to establish a connection to the given WiFi network
@@ -71,6 +116,10 @@ void TaskCheckWiFiConnection(void *pvParameters) {
 void TaskCheckTBConnection(void *pvParameters) {
   while(1) {
     CheckTBConnection();
+    if (!tb.Shared_Attributes_Subscribe(attributes_callback)) {
+        Serial.println("Failed to subscribe for shared attribute updates");
+        return;
+    }
     vTaskDelay(pdMS_TO_TICKS(TB_CONNECT_CHECKING_INTERVAL_MS));
   }
 }
@@ -98,6 +147,21 @@ void TaskReadAndSendTelemetryData(void *pvParameters) {
   }
 }
 
+void TaskTBloop(void *pvParameters) {
+  while(1) {
+    tb.loop();
+    vTaskDelay(pdMS_TO_TICKS(TB_LOOP_INTERVAL_MS));
+  }
+}
+
+void TaskWatering(void *pvParameters) {
+  while(1) {
+    // Simulate watering task
+    Serial.println(wateringState);
+    vTaskDelay(pdMS_TO_TICKS(10000)); // Simulate watering every 5 seconds
+  }
+}
+
 void setup() {
   Serial.begin(SERIAL_DEBUG_BAUD);
   delay(1000);
@@ -106,9 +170,11 @@ void setup() {
   Wire.begin();
   dht20.begin();
   
+  xTaskCreate(TaskWatering, "Watering task", 2048, NULL, 2, NULL);
   xTaskCreate(TaskCheckWiFiConnection, "Check WiFi connection", 2048, NULL, 2, NULL);
   xTaskCreate(TaskCheckTBConnection, "Check Thingsboard connection", 2048, NULL, 2, NULL);
-  xTaskCreate(TaskReadAndSendTelemetryData, "Read and send telemetry data", 2048, NULL, 2, NULL);
+  xTaskCreate(TaskTBloop, "ThingsBoard loop", 2048, NULL, 2, NULL);
+  // xTaskCreate(TaskReadAndSendTelemetryData, "Read and send telemetry data", 2048, NULL, 2, NULL);
 }
 
 void loop() {
