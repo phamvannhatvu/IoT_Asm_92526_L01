@@ -36,7 +36,7 @@ LightSensor lightSensor;
 WaterPump waterPump;
 
 // ESP NOW Sending
-uint8_t receiverMAC[] = {0x24, 0x6F, 0x28, 0xAB, 0xCD, 0xEF};
+uint8_t receiverMAC[] = {0xf8, 0xb3, 0xb7, 0x35, 0x09, 0x68};
 
 typedef struct struct_message {
   int id;
@@ -128,6 +128,17 @@ void TaskReadAndSendTelemetryData(void *pvParameters) {
 
     // Water pump control
     waterPump.pump(brightness / 4095.0 * 255);
+
+    struct_message dataToSend;
+
+    dataToSend.temperature = temperature;
+    dataToSend.humidity = humidity;
+    dataToSend.brightness = brightness;
+    
+    esp_err_t result = esp_now_send(receiverMAC, (uint8_t *)&dataToSend, sizeof(dataToSend));
+    if (result != ESP_OK) {
+      Serial.println("Error sending the data");
+    }
 
     vTaskDelay(pdMS_TO_TICKS(SEND_TELEMETRY_INTERVAL_MS));
   }
