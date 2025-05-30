@@ -6,6 +6,7 @@
 #include "water_pump.h"
 #include <ArduinoOTA.h>
 #include <esp_smartconfig.h>
+#include <esp_now.h>
 
 constexpr char WIFI_SSID[] = "MSI";
 constexpr char WIFI_PASSWORD[] = "25122003";
@@ -33,6 +34,21 @@ ThingsBoard tb(mqttClient, MAX_MESSAGE_SIZE);
 TempHumidSensor tempHumidSensor;
 LightSensor lightSensor;
 WaterPump waterPump;
+
+// ESP NOW Sending
+uint8_t receiverMAC[] = {0x24, 0x6F, 0x28, 0xAB, 0xCD, 0xEF};
+
+typedef struct struct_message {
+  int id;
+  float temperature;
+  float humidity;
+  float brightness;
+} struct_message;
+
+void onDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+  Serial.print("Delivery status: ");
+  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Success" : "Fail");
+}
 
 void InitWiFi() {
   Serial.println("Connecting to AP ...");
@@ -100,15 +116,15 @@ void TaskReadAndSendTelemetryData(void *pvParameters) {
       Serial.print(humidity);
       Serial.println(" %");
 
-      tb.sendTelemetryData("temperature", temperature);
-      tb.sendTelemetryData("humidity", humidity);
+      // tb.sendTelemetryData("temperature", temperature);
+      // tb.sendTelemetryData("humidity", humidity);
     }
 
     // Brightness
     uint32_t brightness = lightSensor.getBrightness();
     Serial.print("Brightness: ");
     Serial.println(brightness);
-    tb.sendTelemetryData("brightness", brightness);
+    // tb.sendTelemetryData("brightness", brightness);
 
     // Water pump control
     waterPump.pump(brightness / 4095.0 * 255);
@@ -125,6 +141,23 @@ void setup() {
   lightSensor.begin(LIGHT_SENSOR_PIN);
   waterPump.begin(WATER_PUMP_PIN);
   
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("ESP-NOW init failed");
+    return;
+  }
+
+  esp_now_register_send_cb(onDataSent);
+
+  esp_now_peer_info_t peerInfo = {};
+  memcpy(peerInfo.peer_addr, receiverMAC, 6);
+  peerInfo.channel = 0;
+  peerInfo.encrypt = false;
+
+  if (esp_now_add_peer(&peerInfo) != ESP_OK) {
+    Serial.println("Failed to add peer");
+    return;
+  }
+
   xTaskCreate(TaskCheckWiFiConnection, "Check WiFi connection", 2048, NULL, 2, NULL);
   xTaskCreate(TaskCheckTBConnection, "Check Thingsboard connection", 2048, NULL, 2, NULL);
   xTaskCreate(TaskReadAndSendTelemetryData, "Read and send telemetry data", 2048, NULL, 2, NULL);
