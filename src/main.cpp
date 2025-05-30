@@ -35,19 +35,19 @@ TempHumidSensor tempHumidSensor;
 LightSensor lightSensor;
 WaterPump waterPump;
 
-// ESP NOW Sending
-uint8_t receiverMAC[] = {0x24, 0x6F, 0x28, 0xAB, 0xCD, 0xEF};
-
+// ESP-NOW receiving
 typedef struct struct_message {
   int id;
   float temperature;
   float humidity;
-  float brightness;
 } struct_message;
 
-void onDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
-  Serial.print("Delivery status: ");
-  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Success" : "Fail");
+struct_message incomingData;
+
+void onDataRecv(const uint8_t *mac, const uint8_t *incoming, int len) {
+  memcpy(&incomingData, incoming, sizeof(incomingData));
+  Serial.printf("Received -> ID: %d, Temp: %.2f, Hum: %.2f\n",
+                incomingData.id, incomingData.temperature, incomingData.humidity);
 }
 
 void InitWiFi() {
@@ -146,17 +146,7 @@ void setup() {
     return;
   }
 
-  esp_now_register_send_cb(onDataSent);
-
-  esp_now_peer_info_t peerInfo = {};
-  memcpy(peerInfo.peer_addr, receiverMAC, 6);
-  peerInfo.channel = 0;
-  peerInfo.encrypt = false;
-
-  if (esp_now_add_peer(&peerInfo) != ESP_OK) {
-    Serial.println("Failed to add peer");
-    return;
-  }
+  esp_now_register_recv_cb(onDataRecv);
 
   xTaskCreate(TaskCheckWiFiConnection, "Check WiFi connection", 2048, NULL, 2, NULL);
   xTaskCreate(TaskCheckTBConnection, "Check Thingsboard connection", 2048, NULL, 2, NULL);
