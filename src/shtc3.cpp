@@ -58,70 +58,52 @@ void SHTC3::setSlaveID(uint8_t slaveID) {
 
 }
 
-float SHTC3::getHumidity() {
+float SHTC3::getHumidity(bool &status) {
     uint16_t result[1];
-    uint8_t status = this->modbus.readHoldingRegisters(this->slaveID, REGISTER_ADDRESS_HUMIDITY, 1, result);
+    status = this->modbus.readHoldingRegisters(this->slaveID, REGISTER_ADDRESS_HUMIDITY, 1, result);
     
     if (status == MODBUS_OK) {
         this->humidityValue = result[0] / 10.0f; // Combine high and low bytes
     } else if (status == MODBUS_ERROR_SLAVE_FAIL) {
-        this->humidityValue = 0; // Slave device not responding
         Serial.println("Error: Slave device not responding.");
     } else if (status == MODBUS_ERROR_ILLEGAL_FC) {
-        this->humidityValue = 0; // Illegal function code
         Serial.println("Error: Illegal function code.");
     } else if (status == MODBUS_ERROR_ILLEGAL_ADDR) {
-        this->humidityValue = 0; // Illegal address
         Serial.println("Error: Illegal address.");
     } else if (status == MODBUS_ERROR_ILLEGAL_DATA) {
-        this->humidityValue = 0; // Illegal data
         Serial.println("Error: Illegal data."); 
     } else if (status == MODBUS_ERROR_TIMEOUT) {
         Serial.println("Error: Timeout while reading humidity.");
-        this->humidityValue = 0; // Timeout error
     } else if (status == MODBUS_ERROR_CRC) {
         Serial.println("Error: CRC error while reading humidity.");
-        // Handle CRC error
-        this->humidityValue = 0; // CRC error
     } else {
         Serial.println("Error: Unknown error while reading humidity.");
-        // Handle unknown error
-        this->humidityValue = 0; // Error reading humidity
     }
     
     return this->humidityValue;
 }
 
-float SHTC3::getTemperature() {
+float SHTC3::getTemperature(bool &status) {
     uint16_t result[1];
-    uint8_t status = this->modbus.readHoldingRegisters(this->slaveID, REGISTER_ADDRESS_TEMPERATURE, 1, result);
+    status = this->modbus.readHoldingRegisters(this->slaveID, REGISTER_ADDRESS_TEMPERATURE, 1, result);
     
     if (status == MODBUS_OK) {
         int16_t tempRaw = static_cast<int16_t>(result[0]);
         this->temperatureValue = static_cast<float>(tempRaw) / 10.0f;
     } else if (status == MODBUS_ERROR_SLAVE_FAIL) {
-        this->temperatureValue = 0; // Slave device not responding
         Serial.println("Error: Slave device not responding.");
     } else if (status == MODBUS_ERROR_ILLEGAL_FC) {
-        this->temperatureValue = 0; // Illegal function code
         Serial.println("Error: Illegal function code.");
     } else if (status == MODBUS_ERROR_ILLEGAL_ADDR) {
-        this->temperatureValue = 0; // Illegal address
         Serial.println("Error: Illegal address.");
     } else if (status == MODBUS_ERROR_ILLEGAL_DATA) {
-        this->temperatureValue = 0; // Illegal data
         Serial.println("Error: Illegal data."); 
     } else if (status == MODBUS_ERROR_TIMEOUT) {
         Serial.println("Error: Timeout while reading temperature.");
-        this->temperatureValue = 0; // Timeout error
     } else if (status == MODBUS_ERROR_CRC) {
         Serial.println("Error: CRC error while reading temperature.");
-        // Handle CRC error
-        this->temperatureValue = 0; // CRC error
     } else {
         Serial.println("Error: Unknown error while reading temperature.");
-        // Handle unknown error
-        this->temperatureValue = 0; // Error reading temperature
     }
     
     return this->temperatureValue;

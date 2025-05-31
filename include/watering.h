@@ -39,7 +39,9 @@ class WateringSystem {
         float flowRate;            // Flow rate of the water pump
 
         // Learning System
-        uint32_t soilHumidityCoefficient;
+        uint32_t soilHumidityCoefficient_P;
+        uint32_t soilHumidityCoefficient_I;
+        float soilHumidityCoefficient_Sum;
         uint32_t airHumidityCoefficient;
         uint32_t airTemperatureCoefficient;
         uint32_t lightIntensityCoefficient;
@@ -66,6 +68,8 @@ class WateringSystem {
                       float airTemperature, 
                       float lightIntensity);
 
+        void setWateringState(bool state);
+        bool isWatering();
         float getFlowRate();
 };
 

@@ -55,6 +55,10 @@ constexpr uint16_t WATERING_INTERVAL_MS_MIN = 10U;
 constexpr uint16_t WATERING_INTERVAL_MS_MAX = 60000U;
 volatile uint16_t wateringInterval = 1000U;
 
+DHT20 dht20;
+WateringSystem pump(80.0f, 80.0f, 27.0f, 30.0f);
+SHTC3 shtc3(&Serial2, SERIAL1_TX, SERIAL1_RX, MODBUS_DE_PINOUT, MODBUS_RE_PINOUT, 1, SERIAL_MODBUS_BAUD);
+
 uint32_t previousStateChange;
 
 constexpr int16_t telemetrySendInterval = 10000U;
@@ -64,9 +68,10 @@ constexpr std::array<const char *, 2U> SHARED_ATTRIBUTES_LIST = {
   WATERING_STATE_ATTR,
   WATERING_INTERVAL_ATTR
 };
-
+bool wateringFlag = false;
 void watering(const JsonVariantConst& variant, JsonDocument& document) {
   Serial.println("watering is called");
+  wateringFlag = true;
   const size_t jsonSize = Helper::Measure_Json(variant);
   char buffer[jsonSize];
   serializeJson(variant, buffer, jsonSize);
@@ -93,10 +98,6 @@ const std::array<IAPI_Implementation*, 4U> apis = {
 // Initialize ThingsBoard instance with the maximum needed buffer size
 ThingsBoard tb(mqttClient, MAX_MESSAGE_SIZE, MAX_MESSAGE_SIZE, Default_Max_Stack_Size, apis);
 // ThingsBoard tb(mqttClient, MAX_MESSAGE_SIZE);
-
-DHT20 dht20;
-WateringSystem pump(70.0f, 80.0f, 27.0f, 30.0f);
-SHTC3 shtc3(&Serial2, SERIAL1_TX, SERIAL1_RX, MODBUS_DE_PINOUT, MODBUS_RE_PINOUT, 1, SERIAL_MODBUS_BAUD);
 
 // void processSharedAttributes(const Shared_Attribute_Data &data) {
 //   for (auto it = data.begin(); it != data.end(); ++it) {
@@ -245,31 +246,46 @@ void TaskTBloop(void *pvParameters) {
 
 void TaskWatering(void *pvParameters) {
   while(1) {
-    // Simulate watering task
-    if (shared_update_subscribed && request_send) {
-      Serial.println(wateringState);
+    if (wateringFlag) {
+      Serial.println("Watering triggered by RPC call");
+      bool humidityStatus = false;
+      bool temperatureStatus = false;
+      pump.watering(shtc3.getHumidity(humidityStatus),
+                    80.0f,
+                    shtc3.getTemperature(temperatureStatus),
+                    30.0f);
+      tb.sendTelemetryData("flowRate", pump.getFlowRate());
+      if (!pump.isWatering()) {
+        wateringFlag = false;
+      }
     }
-    vTaskDelay(pdMS_TO_TICKS(10000)); // Simulate watering every 5 seconds
+    vTaskDelay(pdMS_TO_TICKS(1000)); // Simulate watering every 5 seconds
   }
 }
 
 void TaskSHTC3Read(void *pvParameters) {
   while(1) {
-    float humidity = shtc3.getHumidity();
-    float temperature = shtc3.getTemperature();
+    bool humidityStatus = false;
+    bool temperatureStatus = false;
+    float humidity = shtc3.getHumidity(humidityStatus);
+    float temperature = shtc3.getTemperature(temperatureStatus);
 
-    if (humidity != 0 && temperature != 0) {
+    if (humidityStatus == MODBUS_OK) {
       Serial.print("SHTC3 Humidity: ");
       Serial.print(humidity);
       Serial.println("%");
+      tb.sendTelemetryData("humidity", humidity);
+    } else {
+      Serial.println("Failed to read humidity from SHTC3 sensor!");
+    }
+
+    if (temperatureStatus == MODBUS_OK) {
       Serial.print("SHTC3 Temperature: ");
       Serial.print(temperature);
       Serial.println(" °C");
-
-      tb.sendTelemetryData("humidity", humidity);
       tb.sendTelemetryData("temperature", temperature);
     } else {
-      Serial.println("Failed to read from SHTC3 sensor!");
+      Serial.println("Failed to read temperature from SHTC3 sensor!");
     }
     vTaskDelay(pdMS_TO_TICKS(5000));
   }

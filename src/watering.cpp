@@ -10,8 +10,8 @@ WateringSystem::WateringSystem(float soilHumidityTarget,
     this->lightIntensityTarget = lightIntensityTarget;
 
     // Initialize coefficients
-    this->soilHumidityCoefficient_P = 1;
-    this->soilHumidityCoefficient_I = 1;
+    this->soilHumidityCoefficient_P = 100;
+    this->soilHumidityCoefficient_I = 10;
     this->soilHumidityCoefficient_Sum = 0;
 }
 
@@ -24,10 +24,12 @@ void WateringSystem::flowRateControl(float soilHumidity,
     // this->airTemperatureCoefficient = airTemperature - this->airTemperature;
     // this->lightIntensityCoefficient = lightIntensity - this->lightIntensity;
 
-    this->flowRate = (soilHumidity - this->soilHumidityTarget) * this->soilHumidityCoefficient_P
-                    + this->soilHumidityCoefficient_Sum * this->soilHumidityCoefficient_I;
+    this->flowRate = (soilHumidity - this->soilHumidityTarget) * this->soilHumidityCoefficient_P;
+                    // + this->soilHumidityCoefficient_Sum * this->soilHumidityCoefficient_I;
     if (this->flowRate > 10000) {
         this->flowRate = 10000;
+    } else if (this->flowRate < 0) {
+        this->flowRate = 0;
     }
 }
 

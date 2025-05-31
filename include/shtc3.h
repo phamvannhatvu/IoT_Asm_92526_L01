@@ -34,8 +34,8 @@ class SHTC3 {
         void setSlaveID(uint8_t slaveID);
         void setBaudrate(uint32_t baudrate);
         
-        float getHumidity();
-        float getTemperature();
+        float getHumidity(bool &status);
+        float getTemperature(bool &status);
 };
 
 #endif // SHTC3_H
