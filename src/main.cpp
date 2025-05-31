@@ -9,10 +9,19 @@
 #include <OTA_Firmware_Update.h>
 #include <Server_Side_RPC.h>
 #include <Shared_Attribute_Update.h>
+#include "shtc3.h"
+
+#define SERIAL1_TX 16
+#define SERIAL1_RX 17
+#define MODBUS_DE_PINOUT 27
+#define MODBUS_RE_PINOUT 14
 
 constexpr char WIFI_SSID[] = "Oreki";
 constexpr char WIFI_PASSWORD[] = "hardware";
+constexpr char WIFI_SSID[] = "Oreki";
+constexpr char WIFI_PASSWORD[] = "hardware";
 
+constexpr char TOKEN[] = "I6CQCDQxVfWAU2uezJeZ";
 constexpr char TOKEN[] = "I6CQCDQxVfWAU2uezJeZ";
 
 constexpr char THINGSBOARD_SERVER[] = "app.coreiot.io";
@@ -24,6 +33,7 @@ constexpr uint16_t TB_CONNECT_CHECKING_INTERVAL_MS = 10000U;
 constexpr uint16_t TB_LOOP_INTERVAL_MS = 10U;
 constexpr uint16_t SEND_TELEMETRY_INTERVAL_MS = 1000U;
 constexpr uint32_t SERIAL_DEBUG_BAUD = 9600U;
+constexpr uint32_t SERIAL_MODBUS_BAUD = 4800U;
 constexpr uint16_t MAX_MESSAGE_SIZE = 1024U;
 
 // Scheduler
@@ -87,6 +97,7 @@ ThingsBoard tb(mqttClient, MAX_MESSAGE_SIZE, MAX_MESSAGE_SIZE, Default_Max_Stack
 // ThingsBoard tb(mqttClient, MAX_MESSAGE_SIZE);
 
 DHT20 dht20;
+SHTC3 shtc3(&Serial2, SERIAL1_TX, SERIAL1_RX, MODBUS_DE_PINOUT, MODBUS_RE_PINOUT, 1, SERIAL_MODBUS_BAUD);
 
 // void processSharedAttributes(const Shared_Attribute_Data &data) {
 //   for (auto it = data.begin(); it != data.end(); ++it) {
@@ -243,14 +254,39 @@ void TaskWatering(void *pvParameters) {
   }
 }
 
+void TaskSHTC3Read(void *pvParameters) {
+  while(1) {
+    float humidity = shtc3.getHumidity();
+    float temperature = shtc3.getTemperature();
+
+    if (humidity != 0 && temperature != 0) {
+      Serial.print("SHTC3 Humidity: ");
+      Serial.print(humidity);
+      Serial.println("%");
+      Serial.print("SHTC3 Temperature: ");
+      Serial.print(temperature);
+      Serial.println(" °C");
+
+      tb.sendTelemetryData("humidity", humidity);
+      tb.sendTelemetryData("temperature", temperature);
+    } else {
+      Serial.println("Failed to read from SHTC3 sensor!");
+    }
+    vTaskDelay(pdMS_TO_TICKS(5000));
+  }
+}
+
 void setup() {
   Serial.begin(SERIAL_DEBUG_BAUD);
+  // Serial2.begin(9600, SERIAL_8N1, 16, 17); // RX, TX pins for Serial2
+  // shct3 = SHCT3(&Serial2, 1, SERIAL_MODBUS_BAUD);
   delay(1000);
   InitWiFi();
 
   Wire.begin();
   dht20.begin();
   
+  xTaskCreate(TaskSHTC3Read, "SHTC3 Read Task", 2048, NULL, 1, NULL);
   xTaskCreate(TaskWatering, "Watering task", 2048, NULL, 2, NULL);
   xTaskCreate(TaskCheckWiFiConnection, "Check WiFi connection", 2048, NULL, 2, NULL);
   xTaskCreate(TaskCheckTBConnection, "Check Thingsboard connection", 4096, NULL, 2, NULL);
@@ -259,5 +295,4 @@ void setup() {
 }
 
 void loop() {
-  
 }
