@@ -10,10 +10,10 @@
 #include <Server_Side_RPC.h>
 #include <Shared_Attribute_Update.h>
 
-constexpr char WIFI_SSID[] = "MSI";
-constexpr char WIFI_PASSWORD[] = "25122003";
+constexpr char WIFI_SSID[] = "Oreki";
+constexpr char WIFI_PASSWORD[] = "hardware";
 
-constexpr char TOKEN[] = "gd63iniu7du1xm4zetoh";
+constexpr char TOKEN[] = "I6CQCDQxVfWAU2uezJeZ";
 
 constexpr char THINGSBOARD_SERVER[] = "app.coreiot.io";
 constexpr uint16_t THINGSBOARD_PORT = 1883U;
