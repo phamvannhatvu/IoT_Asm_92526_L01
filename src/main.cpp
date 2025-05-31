@@ -18,10 +18,7 @@
 
 constexpr char WIFI_SSID[] = "Oreki";
 constexpr char WIFI_PASSWORD[] = "hardware";
-constexpr char WIFI_SSID[] = "Oreki";
-constexpr char WIFI_PASSWORD[] = "hardware";
 
-constexpr char TOKEN[] = "I6CQCDQxVfWAU2uezJeZ";
 constexpr char TOKEN[] = "I6CQCDQxVfWAU2uezJeZ";
 
 constexpr char THINGSBOARD_SERVER[] = "app.coreiot.io";
