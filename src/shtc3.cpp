@@ -2,7 +2,7 @@
 
 // SHTC3::SHTC3() {
 //     this->modbus = ModbusMaster();
-//     this->modbus.begin(DEFAULT_BAUDRATE, TX, RX);
+//     this->modbus.begin(DEFAULT_BAUDRATE, DI, RO);
 
 //     this->slaveID = DEFAULT_SLAVE_ID;
 //     this->baudrate = DEFAULT_BAUDRATE;
@@ -11,9 +11,9 @@
 //     this->temperatureValue = 0;
 // }
 
-SHTC3::SHTC3(HardwareSerial* serialPort, uint16_t TX, uint16_t RX) {
-    this->modbus = ModbusMaster(serialPort);
-    this->modbus.begin(DEFAULT_BAUDRATE, TX, RX);
+SHTC3::SHTC3(HardwareSerial* serialPort, uint8_t DI, uint8_t RO, uint8_t DE, uint8_t RE) {
+    this->modbus = ModbusMaster(serialPort, DE, RE);
+    this->modbus.begin(DEFAULT_BAUDRATE, DI, RO);
     this->modbus.setTimeout(1000);
 
     this->slaveID = DEFAULT_SLAVE_ID;
@@ -23,23 +23,23 @@ SHTC3::SHTC3(HardwareSerial* serialPort, uint16_t TX, uint16_t RX) {
     this->temperatureValue = 0;
 }
 
-SHTC3::SHTC3(HardwareSerial* serialPort, uint16_t TX, uint16_t RX, uint8_t slaveID, uint32_t baudrate) {
-    this->modbus = ModbusMaster(serialPort);
-    this->modbus.begin(DEFAULT_BAUDRATE, TX, RX);
+SHTC3::SHTC3(HardwareSerial* serialPort, uint8_t DI, uint8_t RO, uint8_t DE, uint8_t RE, uint8_t slaveID, uint32_t baudrate) {
+    this->modbus = ModbusMaster(serialPort, DE, RE);
+    this->modbus.begin(DEFAULT_BAUDRATE, DI, RO);
     this->modbus.setTimeout(1000);
 
     switch (baudrate) {
         case 2400U:
             this->modbus.writeSingleRegister(DEFAULT_SLAVE_ID, REGISTER_ADDRESS_BAUDRATE, VALUE_BAUDRATE_2400U);
-            this->modbus.begin(2400U, TX, RX);
+            this->modbus.begin(2400U, DI, RO);
             break;
         case 4800U:
             this->modbus.writeSingleRegister(DEFAULT_SLAVE_ID, REGISTER_ADDRESS_BAUDRATE, VALUE_BAUDRATE_4800U);
-            this->modbus.begin(4800U, TX, RX);
+            this->modbus.begin(4800U, DI, RO);
             break;
         case 9600U:
             this->modbus.writeSingleRegister(DEFAULT_SLAVE_ID, REGISTER_ADDRESS_BAUDRATE, VALUE_BAUDRATE_9600U);
-            this->modbus.begin(9600U, TX, RX);
+            this->modbus.begin(9600U, DI, RO);
             break;
         default:
             exit(1); // Invalid baudrate

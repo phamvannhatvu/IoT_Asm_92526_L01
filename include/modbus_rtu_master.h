@@ -33,6 +33,8 @@
 class ModbusMaster {
     private:
         HardwareSerial* serial;
+        uint8_t DE;
+        uint8_t RE;
         uint8_t rxBuffer[MODBUS_MAX_BUFFER];
         uint8_t txBuffer[MODBUS_MAX_BUFFER];
         uint32_t timeout;
@@ -42,10 +44,11 @@ class ModbusMaster {
         bool validateResponse(uint8_t* buffer, uint16_t length);
         void clearSerialBuffer();
         bool waitForResponse(uint16_t expectedLength);
-        
+        void configModbusRTU(bool transmit);
+
     public:
         ModbusMaster();
-        ModbusMaster(HardwareSerial* serialPort);
+        ModbusMaster(HardwareSerial* serialPort, uint8_t DE, uint8_t RE);
         
         // Configuration
         void begin(uint32_t baud, uint16_t TX, uint16_t RX);

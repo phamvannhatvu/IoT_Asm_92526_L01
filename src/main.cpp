@@ -6,6 +6,11 @@
 #include <ArduinoOTA.h>
 #include "shtc3.h"
 
+#define SERIAL1_TX 16
+#define SERIAL1_RX 17
+#define MODBUS_DE_PINOUT 27
+#define MODBUS_RE_PINOUT 14
+
 constexpr char WIFI_SSID[] = "Oreki";
 constexpr char WIFI_PASSWORD[] = "hardware";
 
@@ -28,7 +33,7 @@ Arduino_MQTT_Client mqttClient(wifiClient);
 ThingsBoard tb(mqttClient, MAX_MESSAGE_SIZE);
 
 DHT20 dht20;
-SHTC3 shtc3(&Serial2, 16, 17, 1, SERIAL_MODBUS_BAUD);
+SHTC3 shtc3(&Serial2, SERIAL1_TX, SERIAL1_RX, MODBUS_DE_PINOUT, MODBUS_RE_PINOUT, 1, SERIAL_MODBUS_BAUD);
 
 void InitWiFi() {
   Serial.println("Connecting to AP ...");
@@ -103,8 +108,7 @@ void TaskReadAndSendTelemetryData(void *pvParameters) {
 
 void TaskSHTC3Read(void *pvParameters) {
   while(1) {
-    // float humidity = shtc3.getHumidity();
-    float humidity = 50; // For testing purposes, replace with actual sensor reading
+    float humidity = shtc3.getHumidity();
     float temperature = shtc3.getTemperature();
 
     if (humidity != 0 && temperature != 0) {
