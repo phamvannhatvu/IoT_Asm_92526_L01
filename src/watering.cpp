@@ -1,26 +1,42 @@
 #include "watering.h"
 
-WateringSystem::flowRateControl(float soilHumidity, 
+WateringSystem::WateringSystem(float soilHumidityTarget, 
+                                 float airHumidityTarget, 
+                                 float airTemperatureTarget, 
+                                 float lightIntensityTarget) {
+    this->soilHumidityTarget = soilHumidityTarget;
+    this->airHumidityTarget = airHumidityTarget;
+    this->airTemperatureTarget = airTemperatureTarget;
+    this->lightIntensityTarget = lightIntensityTarget;
+
+    // Initialize coefficients
+    this->soilHumidityCoefficient = 1; // Default value, can be adjusted
+}
+
+void WateringSystem::flowRateControl(float soilHumidity, 
                                  float airHumidity, 
                                  float airTemperature, 
                                  float lightIntensity) {
     this->soilHumidityCoefficient = soilHumidity - this->soilHumidity;
-    this->airHumidityCoefficient = airHumidity - this->airHumidity;
-    this->airTemperatureCoefficient = airTemperature - this->airTemperature;
-    this->lightIntensityCoefficient = lightIntensity - this->lightIntensity;
+    // this->airHumidityCoefficient = airHumidity - this->airHumidity;
+    // this->airTemperatureCoefficient = airTemperature - this->airTemperature;
+    // this->lightIntensityCoefficient = lightIntensity - this->lightIntensity;
 
     // miss constraint for flow rate
-    this->flowRate = soilHumidityCoefficient * this->soilHumidityTarget +
-                     airHumidityCoefficient * this->airHumidityTarget +
-                     airTemperatureCoefficient * this->airTemperatureTarget +
-                     lightIntensityCoefficient * this->lightIntensityTarget;
+    this->flowRate = soilHumidityCoefficient * this->soilHumidityTarget;// +
+                    //  airHumidityCoefficient * this->airHumidityTarget +
+                    //  airTemperatureCoefficient * this->airTemperatureTarget +
+                    //  lightIntensityCoefficient * this->lightIntensityTarget;
 }
 
-WateringSystem::watering(float soilHumidity, 
+void WateringSystem::watering(float soilHumidity, 
                          float airHumidity, 
                          float airTemperature, 
                          float lightIntensity) {
-    this->flowRateControl();
+    this->flowRateControl(soilHumidity, 
+                          airHumidity, 
+                          airTemperature, 
+                          lightIntensity);
     this->soilHumidity = soilHumidity;
     this->airHumidity = airHumidity;
     this->airTemperature = airTemperature;
@@ -29,10 +45,13 @@ WateringSystem::watering(float soilHumidity,
     if (this->soilHumidity < this->soilHumidityTarget) {
         this->wateringState = true;
         this->pumpOn(this->flowRate);
-        this->flowRateControl();
     } else {
         this->wateringState = false;
         this->pumpOff();
         return;
     }
+}
+
+float WateringSystem::getFlowRate() {
+    return this->flowRate;
 }

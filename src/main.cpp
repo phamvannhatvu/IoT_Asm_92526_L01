@@ -5,6 +5,7 @@
 #include "Wire.h"
 #include <ArduinoOTA.h>
 #include "scheduler.h"
+#include "watering.h"
 
 constexpr char WIFI_SSID[] = "Oreki";
 constexpr char WIFI_PASSWORD[] = "hardware";
@@ -50,6 +51,7 @@ Arduino_MQTT_Client mqttClient(wifiClient);
 ThingsBoard tb(mqttClient, MAX_MESSAGE_SIZE);
 
 DHT20 dht20;
+WateringSystem pump(70.0f, 80.0f, 27.0f, 30.0f);
 
 void processSharedAttributes(const Shared_Attribute_Data &data) {
   for (auto it = data.begin(); it != data.end(); ++it) {

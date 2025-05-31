@@ -65,6 +65,8 @@ class WateringSystem {
                       float airHumidity, 
                       float airTemperature, 
                       float lightIntensity);
+
+        float getFlowRate();
 };
 
 #endif // WATERING_H
