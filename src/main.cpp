@@ -7,6 +7,7 @@
 #include "scheduler.h"
 #include <Attribute_Request.h>
 #include <OTA_Firmware_Update.h>
+#include <Server_Side_RPC.h>
 #include <Shared_Attribute_Update.h>
 
 constexpr char WIFI_SSID[] = "MSI";
@@ -37,6 +38,7 @@ void requestTimedOut() {
 
 volatile bool attributesChanged = false;
 volatile bool shared_update_subscribed = false;
+volatile bool rpc_server_subscribed = false;
 volatile bool request_send = false;
 volatile int wateringMode = 0;
 volatile bool wateringState = false;
@@ -55,16 +57,31 @@ constexpr std::array<const char *, 2U> SHARED_ATTRIBUTES_LIST = {
   WATERING_INTERVAL_ATTR
 };
 
+void watering(const JsonVariantConst& variant, JsonDocument& document) {
+  Serial.println("watering is called");
+  const size_t jsonSize = Helper::Measure_Json(variant);
+  char buffer[jsonSize];
+  serializeJson(variant, buffer, jsonSize);
+  Serial.println(buffer);
+}
+
+const std::array<RPC_Callback, 1U> RPC_CALLBACK = {
+    RPC_Callback{"watering", watering}
+};
+
 WiFiClient wifiClient;
 Arduino_MQTT_Client mqttClient(wifiClient);
 OTA_Firmware_Update<> ota;
 Shared_Attribute_Update<1U, MAX_ATTRIBUTES> shared_update;
+Server_Side_RPC<> server_side_rpc;
 Attribute_Request<2U, MAX_ATTRIBUTES> attr_request;
-const std::array<IAPI_Implementation*, 3U> apis = {
+const std::array<IAPI_Implementation*, 4U> apis = {
     &shared_update,
     &attr_request,
+    &server_side_rpc,
     &ota
 };
+
 // Initialize ThingsBoard instance with the maximum needed buffer size
 ThingsBoard tb(mqttClient, MAX_MESSAGE_SIZE, MAX_MESSAGE_SIZE, Default_Max_Stack_Size, apis);
 // ThingsBoard tb(mqttClient, MAX_MESSAGE_SIZE);
@@ -167,6 +184,14 @@ void TaskCheckTBConnection(void *pvParameters) {
       request_send = attr_request.Shared_Attributes_Request(sharedCallback);
       if (!request_send) {
         Serial.println("Failed to request shared attributes");
+      }
+    }
+
+    if (!rpc_server_subscribed) {
+      Serial.println("Subscribing server-side RPC");
+      rpc_server_subscribed = server_side_rpc.RPC_Subscribe(RPC_CALLBACK.cbegin(), RPC_CALLBACK.cend());
+      if (!rpc_server_subscribed) {
+        Serial.println("Failed to subscribe rpc");
       }
     }
 
