@@ -5,6 +5,7 @@
 #include "Wire.h"
 #include <ArduinoOTA.h>
 #include "scheduler.h"
+#include "watering.h"
 #include <Attribute_Request.h>
 #include <OTA_Firmware_Update.h>
 #include <Server_Side_RPC.h>
@@ -94,6 +95,7 @@ ThingsBoard tb(mqttClient, MAX_MESSAGE_SIZE, MAX_MESSAGE_SIZE, Default_Max_Stack
 // ThingsBoard tb(mqttClient, MAX_MESSAGE_SIZE);
 
 DHT20 dht20;
+WateringSystem pump(70.0f, 80.0f, 27.0f, 30.0f);
 SHTC3 shtc3(&Serial2, SERIAL1_TX, SERIAL1_RX, MODBUS_DE_PINOUT, MODBUS_RE_PINOUT, 1, SERIAL_MODBUS_BAUD);
 
 // void processSharedAttributes(const Shared_Attribute_Data &data) {
