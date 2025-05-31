@@ -10,23 +10,25 @@ WateringSystem::WateringSystem(float soilHumidityTarget,
     this->lightIntensityTarget = lightIntensityTarget;
 
     // Initialize coefficients
-    this->soilHumidityCoefficient = 1; // Default value, can be adjusted
+    this->soilHumidityCoefficient_P = 1;
+    this->soilHumidityCoefficient_I = 1;
+    this->soilHumidityCoefficient_Sum = 0;
 }
 
 void WateringSystem::flowRateControl(float soilHumidity, 
                                  float airHumidity, 
                                  float airTemperature, 
                                  float lightIntensity) {
-    this->soilHumidityCoefficient = soilHumidity - this->soilHumidity;
+    this->soilHumidityCoefficient_Sum += (this->soilHumidityTarget- soilHumidity);
     // this->airHumidityCoefficient = airHumidity - this->airHumidity;
     // this->airTemperatureCoefficient = airTemperature - this->airTemperature;
     // this->lightIntensityCoefficient = lightIntensity - this->lightIntensity;
 
-    // miss constraint for flow rate
-    this->flowRate = soilHumidityCoefficient * this->soilHumidityTarget;// +
-                    //  airHumidityCoefficient * this->airHumidityTarget +
-                    //  airTemperatureCoefficient * this->airTemperatureTarget +
-                    //  lightIntensityCoefficient * this->lightIntensityTarget;
+    this->flowRate = (soilHumidity - this->soilHumidityTarget) * this->soilHumidityCoefficient_P
+                    + this->soilHumidityCoefficient_Sum * this->soilHumidityCoefficient_I;
+    if (this->flowRate > 10000) {
+        this->flowRate = 10000;
+    }
 }
 
 void WateringSystem::watering(float soilHumidity, 
@@ -47,9 +49,27 @@ void WateringSystem::watering(float soilHumidity,
         this->pumpOn(this->flowRate);
     } else {
         this->wateringState = false;
+        this->soilHumidityCoefficient_Sum = 0; // Reset the sum for the next cycle
         this->pumpOff();
         return;
     }
+}
+void WateringSystem::pumpOn(float flowRate) {
+    // Simulate pump on with the given flow rate
+    Serial.print("Pump is ON with flow rate: ");
+    Serial.println(flowRate);
+}
+void WateringSystem::pumpOff() {
+    // Simulate pump off
+    Serial.println("Pump is OFF");
+}
+
+void WateringSystem::setWateringState(bool state) {
+    this->wateringState = state;
+}
+
+bool WateringSystem::isWatering() {
+    return this->wateringState;
 }
 
 float WateringSystem::getFlowRate() {
