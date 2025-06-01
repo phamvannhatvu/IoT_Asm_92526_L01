@@ -46,6 +46,9 @@ class WateringSystem {
         uint32_t airTemperatureCoefficient;
         uint32_t lightIntensityCoefficient;
 
+        float waterUsed;           // Track total water used in ml
+        unsigned long lastWateringTime; // Track time for water usage calculation
+
     
 
         void pumpOn(float flowRate);
@@ -71,6 +74,8 @@ class WateringSystem {
         void setWateringState(bool state);
         bool isWatering();
         float getFlowRate();
+        float getWaterUsed() const { return waterUsed; }
+        void resetWaterUsed() { waterUsed = 0.0f; }
 };
 
 #endif // WATERING_H

@@ -13,6 +13,9 @@ WateringSystem::WateringSystem(float soilHumidityTarget,
     this->soilHumidityCoefficient_P = 10;
     this->soilHumidityCoefficient_I = 10;
     this->soilHumidityCoefficient_Sum = 0;
+
+    this->waterUsed = 0.0f;
+    this->lastWateringTime = 0;
 }
 
 void WateringSystem::flowRateControl(float soilHumidity, 
@@ -49,10 +52,20 @@ void WateringSystem::watering(float soilHumidity,
     if (this->soilHumidity < this->soilHumidityTarget) {
         this->wateringState = true;
         this->pumpOn(this->flowRate);
+        
+        // Calculate water used since last check
+        unsigned long currentTime = millis();
+        if (lastWateringTime > 0) {
+            // flowRate is in ml/hour, convert to ml for the time period
+            float timeHours = (currentTime - lastWateringTime) / 3600000.0f; // Convert ms to hours
+            waterUsed += flowRate * timeHours;
+        }
+        lastWateringTime = currentTime;
     } else {
         this->wateringState = false;
-        this->soilHumidityCoefficient_Sum = 0; // Reset the sum for the next cycle
+        this->soilHumidityCoefficient_Sum = 0;
         this->pumpOff();
+        lastWateringTime = 0; // Reset timing when pump stops
         return;
     }
 }
@@ -64,6 +77,9 @@ void WateringSystem::pumpOn(float flowRate) {
 void WateringSystem::pumpOff() {
     // Simulate pump off
     Serial.println("Pump is OFF");
+    Serial.print("Total water used: ");
+    Serial.print(waterUsed);
+    Serial.println(" ml");
 }
 
 void WateringSystem::setWateringState(bool state) {

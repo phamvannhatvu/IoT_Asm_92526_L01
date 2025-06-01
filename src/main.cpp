@@ -12,6 +12,7 @@
 #include <Shared_Attribute_Update.h>
 #include "shtc3.h"
 #include "weather_service.h"
+#include "data_storage.h"
 
 #define SERIAL1_TX 16
 #define SERIAL1_RX 17
@@ -57,8 +58,9 @@ constexpr uint16_t WATERING_INTERVAL_MS_MAX = 60000U;
 volatile uint16_t wateringInterval = 1000U;
 
 DHT20 dht20;
-WateringSystem pump(80.0f, 80.0f, 27.0f, 30.0f);
+WateringSystem pump(70.0f, 80.0f, 27.0f, 30.0f);
 SHTC3 shtc3(&Serial2, SERIAL1_TX, SERIAL1_RX, MODBUS_DE_PINOUT, MODBUS_RE_PINOUT, 1, SERIAL_MODBUS_BAUD);
+DataStorage storage;
 
 uint32_t previousStateChange;
 
@@ -246,61 +248,108 @@ void TaskTBloop(void *pvParameters) {
 }
 
 void TaskWatering(void *pvParameters) {
-  while(1) {
-    if (wateringFlag) {
-      Serial.println("------------------");
-      Serial.println("Watering triggered by RPC call");
-      bool humidityStatus = false;
-      bool temperatureStatus = false;
-      pump.watering(shtc3.getHumidity(humidityStatus),
-                    80.0f,
-                    shtc3.getTemperature(temperatureStatus),
-                    30.0f);
-      tb.sendTelemetryData("flowRate", pump.getFlowRate());
-      if (!pump.isWatering()) {
-        wateringFlag = false;
-      }
+    while(1) {
+        if (wateringFlag) {
+            static float initialHumidity = 0;
+            static uint32_t startTime = 0;
+            static bool cycleStarted = false;
+            bool humidityStatus = false;
+            bool temperatureStatus = false;
+            
+            // Store initial data when starting a new watering cycle
+            if (!cycleStarted) {
+                initialHumidity = shtc3.getHumidity(humidityStatus);
+                if (humidityStatus == MODBUS_OK) {
+                    startTime = millis();
+                    cycleStarted = true;
+                    Serial.println("------------------");
+                    Serial.println("Starting watering cycle");
+                    Serial.printf("Initial soil humidity: %.1f%%\n", initialHumidity);
+                }
+            }
+            
+            // Normal watering process
+            pump.watering(shtc3.getHumidity(humidityStatus),
+                         80.0f,
+                         shtc3.getTemperature(temperatureStatus),
+                         30.0f);
+                         
+            // Store complete package when watering cycle ends
+            if (!pump.isWatering() && wateringFlag && cycleStarted) {
+                float finalHumidity = shtc3.getHumidity(humidityStatus);
+                if (humidityStatus == MODBUS_OK) {
+                    // Store complete watering package
+                    storage.storeWateringPackage(
+                        startTime,
+                        initialHumidity,
+                        finalHumidity,
+                        pump.getWaterUsed()
+                    );
+                    
+                    Serial.println("------------------");
+                    Serial.println("Watering cycle completed");
+                    Serial.printf("Initial humidity: %.1f%%\n", initialHumidity);
+                    Serial.printf("Final humidity: %.1f%%\n", finalHumidity);
+                    Serial.printf("Total water used: %.2f ml\n", pump.getWaterUsed());
+                }
+                wateringFlag = false;
+                cycleStarted = false;
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
-    vTaskDelay(pdMS_TO_TICKS(1000)); // Simulate watering every 5 seconds
-  }
 }
 
 void TaskSHTC3Read(void *pvParameters) {
-  while(1) {
-    bool humidityStatus = false;
-    bool temperatureStatus = false;
-    float soilHumidity = shtc3.getHumidity(humidityStatus);
-    float soilTemperature = shtc3.getTemperature(temperatureStatus);
+    static float initialHumidity = 0;
+    static bool isWateringStart = false;
 
-    if (humidityStatus == MODBUS_OK) {
-      Serial.println("------------------");
-      Serial.print("SHTC3 Soil Humidity: ");
-      Serial.print(soilHumidity);
-      Serial.println("%");
-      tb.sendTelemetryData("soilHumidity", soilHumidity);
-    } else {
-      Serial.println("------------------");
-      Serial.println("Failed to read Soil Humidity from SHTC3 sensor!");
-    }
+    while(1) {
+        bool humidityStatus = false;
+        bool temperatureStatus = false;
+        float soilHumidity = shtc3.getHumidity(humidityStatus);
+        float soilTemperature = shtc3.getTemperature(temperatureStatus);
 
-    if (temperatureStatus == MODBUS_OK) {
-      Serial.println("------------------");
-      Serial.print("SHTC3 Soil Temperature: ");
-      Serial.print(soilTemperature);
-      Serial.println(" °C");
-      tb.sendTelemetryData("soilTemperature", soilTemperature);
-    } else {
-      Serial.println("------------------");
-      Serial.println("Failed to read Soil Temperature from SHTC3 sensor!");
+        if (humidityStatus == MODBUS_OK && temperatureStatus == MODBUS_OK) {
+            // Store data only at the start and end of watering cycle
+            if (wateringFlag && !isWateringStart) {
+                // Beginning of watering cycle
+                initialHumidity = soilHumidity;
+                isWateringStart = true;
+                storage.storeSensorData(soilHumidity, soilTemperature);
+                Serial.println("------------------");
+                Serial.println("Initial watering data stored");
+            } else if (!wateringFlag && isWateringStart) {
+                // End of watering cycle
+                storage.storeSensorData(soilHumidity, soilTemperature);
+                Serial.println("------------------");
+                Serial.println("Final watering data stored");
+                isWateringStart = false;
+            }
+
+            // Always send telemetry data
+            Serial.println("------------------");
+            Serial.print("SHTC3 Soil Humidity: ");
+            Serial.print(soilHumidity);
+            Serial.println("%");
+            tb.sendTelemetryData("soilHumidity", soilHumidity);
+
+            Serial.print("SHTC3 Soil Temperature: ");
+            Serial.print(soilTemperature);
+            Serial.println(" °C");
+            tb.sendTelemetryData("soilTemperature", soilTemperature);
+        } else {
+            Serial.println("------------------");
+            Serial.println("Failed to read Soil Humidity or Temperature from SHTC3 sensor!");
+        }
+        vTaskDelay(pdMS_TO_TICKS(5000));
     }
-    vTaskDelay(pdMS_TO_TICKS(5000));
-  }
 }
 
 constexpr char WEATHER_API_KEY[] = "2feda8f965ede8af1b286418cfe18a5e";  // Replace with your actual OpenWeatherMap API key
 constexpr float LATITUDE = 10.87999801f;
 constexpr float LONGITUDE = 106.80634192f;
-constexpr uint32_t WEATHER_UPDATE_INTERVAL_MS = 5000; // 5 seconds
+constexpr uint32_t WEATHER_UPDATE_INTERVAL_MS = 300000; // 5 minutes
 
 WeatherService weatherService(WEATHER_API_KEY, LATITUDE, LONGITUDE);
 
@@ -343,6 +392,48 @@ void TaskWeatherUpdate(void *pvParameters) {
     }
 }
 
+void showStorageStats() {
+    Serial.println("\n=== Storage Statistics ===");
+    
+    bool humidityStatus = false;
+    bool temperatureStatus = false;
+    float currentHumidity = shtc3.getHumidity(humidityStatus);
+    float currentTemperature = shtc3.getTemperature(temperatureStatus);
+    
+    // Serial.println("\nCurrent Sensor Values:");
+    // if (humidityStatus == MODBUS_OK && temperatureStatus == MODBUS_OK) {
+    //     Serial.printf("Soil Humidity: %.1f%%\n", currentHumidity);
+    //     Serial.printf("Soil Temperature: %.1f°C\n", currentTemperature);
+    // } else {
+    //     Serial.println("Failed to read current sensor values");
+    // }
+    
+    // Serial.println("\nWatering Status:");
+    // Serial.printf("Watering Active: %s\n", wateringFlag ? "Yes" : "No");
+    // if (wateringFlag) {
+    //     Serial.printf("Water Used: %.2f ml\n", pump.getWaterUsed());
+    // }
+    
+    Serial.println("\nStorage Info:");
+    storage.printStorageStats();
+    
+    Serial.println("\nSystem Uptime:");
+    unsigned long uptime = millis() / 1000; // Convert to seconds
+    Serial.printf("Running for: %02lu:%02lu:%02lu\n", 
+        uptime / 3600, (uptime % 3600) / 60, uptime % 60);
+    
+    Serial.println("========================\n");
+}
+
+constexpr uint32_t STATS_UPDATE_INTERVAL_MS = 10000; // 10 seconds
+
+void TaskPeriodicStats(void *pvParameters) {
+    while(1) {
+        showStorageStats();
+        vTaskDelay(pdMS_TO_TICKS(STATS_UPDATE_INTERVAL_MS));
+    }
+}
+
 void setup() {
   Serial.begin(SERIAL_DEBUG_BAUD);
   // Serial2.begin(9600, SERIAL_8N1, 16, 17); // RX, TX pins for Serial2
@@ -353,14 +444,23 @@ void setup() {
   Wire.begin();
   dht20.begin();
   
-  // Increase stack sizes and adjust priorities
-  xTaskCreate(TaskSHTC3Read, "SHTC3 Read Task", 4096, NULL, 2, NULL);
-  xTaskCreate(TaskWatering, "Watering task", 4096, NULL, 3, NULL);
-  xTaskCreate(TaskCheckWiFiConnection, "Check WiFi connection", 4096, NULL, 4, NULL);
-  xTaskCreate(TaskCheckTBConnection, "Check Thingsboard connection", 8192, NULL, 4, NULL);
-  xTaskCreate(TaskTBloop, "ThingsBoard loop", 4096, NULL, 3, NULL);
-  xTaskCreate(TaskWeatherUpdate, "Weather Update Task", 8192, NULL, 2, NULL);
-  // xTaskCreate(TaskReadAndSendTelemetryData, "Read and send telemetry data", 2048, NULL, 2, NULL);
+  if (!storage.begin()) {
+        Serial.println("Failed to initialize storage!");
+    }
+    
+  // Task creation with optimized stack sizes
+    // High priority network tasks
+    xTaskCreate(TaskCheckWiFiConnection, "Check WiFi connection", 3072, NULL, 4, NULL);      // Reduced - simple WiFi checks
+    xTaskCreate(TaskCheckTBConnection, "Check TB connection", 4096, NULL, 4, NULL);          // Reduced - basic TB connection
+    xTaskCreate(TaskTBloop, "ThingsBoard loop", 4096, NULL, 3, NULL);                       // Kept same - TB communication
+    
+    // Medium priority sensor and control tasks
+    xTaskCreate(TaskSHTC3Read, "SHTC3 Read Task", 4096, NULL, 2, NULL);                     // Reduced - simple sensor reading
+    xTaskCreate(TaskWatering, "Watering task", 8192, NULL, 3, NULL);                        // Reduced - watering control
+    xTaskCreate(TaskWeatherUpdate, "Weather Update Task", 8192, NULL, 2, NULL);             // Kept same - JSON parsing
+    
+    // Low priority monitoring task
+    xTaskCreate(TaskPeriodicStats, "Periodic Stats", 4096, NULL, 1, NULL);                  // Reduced - simple stats display
 }
 
 void loop() {
