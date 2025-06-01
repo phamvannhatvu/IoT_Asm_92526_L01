@@ -24,8 +24,8 @@ void WateringSystem::flowRateControl(float soilHumidity,
     // this->airTemperatureCoefficient = airTemperature - this->airTemperature;
     // this->lightIntensityCoefficient = lightIntensity - this->lightIntensity;
 
-    this->flowRate = (this->soilHumidityTarget - soilHumidity) * this->soilHumidityCoefficient_P;
-                    // + this->soilHumidityCoefficient_Sum * this->soilHumidityCoefficient_I;
+    this->flowRate = (this->soilHumidityTarget - soilHumidity) * this->soilHumidityCoefficient_P
+                    + this->soilHumidityCoefficient_Sum * this->soilHumidityCoefficient_I;
     if (this->flowRate > 10000) {
         this->flowRate = 10000;
     } else if (this->flowRate < 0) {
