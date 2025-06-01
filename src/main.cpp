@@ -13,15 +13,13 @@
 #include <Shared_Attribute_Update.h>
 #include "shtc3.h"
 #include <esp_smartconfig.h>
+#include <Espressif_Updater.h>
+#include "weather_service.h"
 
 #define SERIAL1_TX 16
 #define SERIAL1_RX 17
 #define MODBUS_DE_PINOUT 27
 #define MODBUS_RE_PINOUT 14
-#include <OTA_Firmware_Update.h>
-#include <Espressif_Updater.h>
-#include <Shared_Attribute_Update.h>
-#include <Attribute_Request.h>
 
 #define SMARTCONFIG_TIMEOUT 30
 
@@ -378,6 +376,7 @@ void TaskTBloop(void *pvParameters) {
 void TaskWatering(void *pvParameters) {
   while(1) {
     if (wateringFlag) {
+      Serial.println("------------------");
       Serial.println("Watering triggered by RPC call");
       bool humidityStatus = false;
       bool temperatureStatus = false;
@@ -398,28 +397,78 @@ void TaskSHTC3Read(void *pvParameters) {
   while(1) {
     bool humidityStatus = false;
     bool temperatureStatus = false;
-    float humidity = shtc3.getHumidity(humidityStatus);
-    float temperature = shtc3.getTemperature(temperatureStatus);
+    float soilHumidity = shtc3.getHumidity(humidityStatus);
+    float soilTemperature = shtc3.getTemperature(temperatureStatus);
 
     if (humidityStatus == MODBUS_OK) {
-      Serial.print("SHTC3 Humidity: ");
-      Serial.print(humidity);
+      Serial.println("------------------");
+      Serial.print("SHTC3 Soil Humidity: ");
+      Serial.print(soilHumidity);
       Serial.println("%");
-      tb.sendTelemetryData("humidity", humidity);
+      tb.sendTelemetryData("soilHumidity", soilHumidity);
     } else {
-      Serial.println("Failed to read humidity from SHTC3 sensor!");
+      Serial.println("------------------");
+      Serial.println("Failed to read Soil Humidity from SHTC3 sensor!");
     }
 
     if (temperatureStatus == MODBUS_OK) {
-      Serial.print("SHTC3 Temperature: ");
-      Serial.print(temperature);
+      Serial.println("------------------");
+      Serial.print("SHTC3 Soil Temperature: ");
+      Serial.print(soilTemperature);
       Serial.println(" °C");
-      tb.sendTelemetryData("temperature", temperature);
+      tb.sendTelemetryData("soilTemperature", soilTemperature);
     } else {
-      Serial.println("Failed to read temperature from SHTC3 sensor!");
+      Serial.println("------------------");
+      Serial.println("Failed to read Soil Temperature from SHTC3 sensor!");
     }
     vTaskDelay(pdMS_TO_TICKS(5000));
   }
+}
+
+constexpr char WEATHER_API_KEY[] = "2feda8f965ede8af1b286418cfe18a5e";  // Replace with your actual OpenWeatherMap API key
+constexpr float LATITUDE = 10.87999801f;
+constexpr float LONGITUDE = 106.80634192f;
+constexpr uint32_t WEATHER_UPDATE_INTERVAL_MS = 5000; // 5 seconds
+
+WeatherService weatherService(WEATHER_API_KEY, LATITUDE, LONGITUDE);
+
+void TaskWeatherUpdate(void *pvParameters) {
+    while(1) {
+        if (WiFi.status() == WL_CONNECTED) {
+            Serial.println("------------------");
+            Serial.println("Updating weather data...");
+            if (weatherService.getCurrentWeather()) {
+                Serial.println("------------------");
+                Serial.println("Weather Data:");
+                Serial.printf("Temperature: %.1f°C\n", weatherService.getTemperature());
+                Serial.printf("Feels Like: %.1f°C\n", weatherService.getFeelsLike());
+                Serial.printf("Pressure: %.0f hPa\n", weatherService.getPressure());
+                Serial.printf("Humidity: %.0f%%\n", weatherService.getHumidity());
+                Serial.printf("Wind Speed: %.1f m/s\n", weatherService.getWindSpeed());
+                
+                float windGust = weatherService.getWindGust();
+                if (windGust > 0) {
+                    Serial.printf("Wind Gust: %.1f m/s\n", windGust);
+                }
+                
+                float rain = weatherService.getRain();
+                if (rain > 0) {
+                    Serial.printf("Rain (1h): %.2f mm\n", rain);
+                }
+                
+                Serial.printf("Clouds: %.0f%%\n", weatherService.getClouds());
+                
+                // Send telemetry to ThingsBoard
+                weatherService.sendWeatherTelemetry(tb);
+                Serial.println("Weather data sent to ThingsBoard");
+            } else {
+                Serial.println("Failed to get weather data!");
+            }
+        } else {
+            Serial.println("WiFi not connected, skipping weather update");
+        }
+        vTaskDelay(pdMS_TO_TICKS(WEATHER_UPDATE_INTERVAL_MS));
+    }
 }
 
 void setup() {
@@ -432,13 +481,14 @@ void setup() {
   lightSensor.begin(LIGHT_SENSOR_PIN);
   waterPump.begin(WATER_PUMP_PIN);
   
-  xTaskCreate(TaskSHTC3Read, "SHTC3 Read Task", 2048, NULL, 1, NULL);
-  xTaskCreate(TaskWatering, "Watering task", 2048, NULL, 2, NULL);
-  xTaskCreate(TaskCheckWiFiConnection, "Check WiFi connection", 2048, NULL, 2, NULL);
-  xTaskCreate(TaskCheckTBConnection, "Check Thingsboard connection", 4096, NULL, 2, NULL);
-  xTaskCreate(TaskOTAUpdate, "OTA Update", 4096, NULL, 2, NULL);
-  xTaskCreate(TaskTBloop, "ThingsBoard loop", 2048, NULL, 2, NULL);
-  // xTaskCreate(TaskReadAndSendTelemetryData, "Read and send telemetry data", 2048, NULL, 2, NULL);
+  // Increase stack sizes and adjust priorities
+  xTaskCreate(TaskSHTC3Read, "SHTC3 Read Task", 4096, NULL, 2, NULL);
+  xTaskCreate(TaskWatering, "Watering task", 4096, NULL, 3, NULL);
+  xTaskCreate(TaskCheckWiFiConnection, "Check WiFi connection", 4096, NULL, 4, NULL);
+  xTaskCreate(TaskCheckTBConnection, "Check Thingsboard connection", 8192, NULL, 4, NULL);
+  xTaskCreate(TaskTBloop, "ThingsBoard loop", 4096, NULL, 3, NULL);
+  xTaskCreate(TaskWeatherUpdate, "Weather Update Task", 8192, NULL, 2, NULL);
+  xTaskCreate(TaskReadAndSendTelemetryData, "Read and send telemetry data", 2048, NULL, 2, NULL);
 }
 
 void loop() {
