@@ -10,7 +10,7 @@ WateringSystem::WateringSystem(float soilHumidityTarget,
     this->lightIntensityTarget = lightIntensityTarget;
 
     // Initialize coefficients
-    this->soilHumidityCoefficient_P = 100;
+    this->soilHumidityCoefficient_P = 10;
     this->soilHumidityCoefficient_I = 10;
     this->soilHumidityCoefficient_Sum = 0;
 }
