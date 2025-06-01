@@ -1,8 +1,9 @@
 #include <WiFi.h>
 #include <Arduino_MQTT_Client.h>
 #include <ThingsBoard.h>
-#include "DHT20.h"
-#include "Wire.h"
+#include "temp_humid.h"
+#include "light.h"
+#include "water_pump.h"
 #include <ArduinoOTA.h>
 #include "scheduler.h"
 #include "watering.h"
@@ -11,6 +12,7 @@
 #include <Server_Side_RPC.h>
 #include <Shared_Attribute_Update.h>
 #include "shtc3.h"
+#include <esp_smartconfig.h>
 
 #define SERIAL1_TX 16
 #define SERIAL1_RX 17
@@ -81,6 +83,13 @@ void watering(const JsonVariantConst& variant, JsonDocument& document) {
 const std::array<RPC_Callback, 1U> RPC_CALLBACK = {
     RPC_Callback{"watering", watering}
 };
+
+#define WATER_PUMP_PIN 14
+#define LIGHT_SENSOR_PIN 36
+
+TempHumidSensor tempHumidSensor;
+LightSensor  lightSensor;
+WaterPump waterPump;
 
 WiFiClient wifiClient;
 Arduino_MQTT_Client mqttClient(wifiClient);
@@ -216,10 +225,12 @@ void TaskCheckTBConnection(void *pvParameters) {
 
 void TaskReadAndSendTelemetryData(void *pvParameters) {
   while(1) {
-    // dht20.read();
     
+    // Humidity and temperature
     float temperature = 25;//dht20.getTemperature();
     float humidity = 50;//dht20.getHumidity();
+
+    tempHumidSensor.get_value(temperature, humidity);
 
     if (isnan(temperature) || isnan(humidity)) {
       Serial.println("Failed to read from DHT20 sensor!");
@@ -233,6 +244,16 @@ void TaskReadAndSendTelemetryData(void *pvParameters) {
       tb.sendTelemetryData("temperature", temperature);
       tb.sendTelemetryData("humidity", humidity);
     }
+
+    // Brightness
+    uint32_t brightness = lightSensor.getBrightness();
+    Serial.print("Brightness: ");
+    Serial.println(brightness);
+    tb.sendTelemetryData("brightness", brightness);
+
+    // Water pump control
+    waterPump.pump(brightness / 4095.0 * 255);
+
     vTaskDelay(pdMS_TO_TICKS(SEND_TELEMETRY_INTERVAL_MS));
   }
 }
@@ -297,9 +318,9 @@ void setup() {
   // shct3 = SHCT3(&Serial2, 1, SERIAL_MODBUS_BAUD);
   delay(1000);
   InitWiFi();
-
-  Wire.begin();
-  dht20.begin();
+  tempHumidSensor.begin();
+  lightSensor.begin(LIGHT_SENSOR_PIN);
+  waterPump.begin(WATER_PUMP_PIN);
   
   xTaskCreate(TaskSHTC3Read, "SHTC3 Read Task", 2048, NULL, 1, NULL);
   xTaskCreate(TaskWatering, "Watering task", 2048, NULL, 2, NULL);
