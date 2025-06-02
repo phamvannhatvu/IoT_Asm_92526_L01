@@ -1,9 +1,17 @@
 #include "light.h"
 
-void LightSensor::begin(uint8_t signalPin) {
+void LightSensor::begin(uint8_t signalPin, uint8_t ledPin) {
     this->signalPin = signalPin;
+    this->ledPin = ledPin;
+
+    pinMode(ledPin, OUTPUT);
+    digitalWrite(ledPin, LOW);
 }
 
-uint32_t LightSensor::getBrightness() {
-    return analogRead(signalPin) / 4095.0 * 70000;
+void LightSensor::controlLED() {
+    if (analogRead(signalPin) < LIGHT_OFF_THRESHOLD) {
+        digitalWrite(ledPin, HIGH);
+    } else {
+        digitalWrite(ledPin, LOW);
+    }
 }
