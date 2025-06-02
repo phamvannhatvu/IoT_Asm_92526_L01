@@ -21,12 +21,12 @@
 #define MODBUS_DE_PINOUT 27
 #define MODBUS_RE_PINOUT 14
 
-#define SMARTCONFIG_TIMEOUT 30
+#define SMARTCONFIG_TIMEOUT 1
 
 constexpr char WIFI_SSID[] = "Oreki";
 constexpr char WIFI_PASSWORD[] = "hardware";
 
-constexpr char TOKEN[] = "I6CQCDQxVfWAU2uezJeZ";
+constexpr char TOKEN[] = "gd63iniu7du1xm4zetoh";
 
 constexpr char THINGSBOARD_SERVER[] = "app.coreiot.io";
 constexpr uint16_t THINGSBOARD_PORT = 1883U;
@@ -89,15 +89,12 @@ const std::array<RPC_Callback, 1U> RPC_CALLBACK = {
     RPC_Callback{"watering", watering}
 };
 
-#define WATER_PUMP_PIN 14
-#define LIGHT_SENSOR_PIN 36
-
 TempHumidSensor tempHumidSensor;
 LightSensor  lightSensor;
 WaterPump waterPump;
 
-#define WATER_PUMP_PIN 14
-#define LIGHT_SENSOR_PIN 36
+#define WATER_PUMP_PIN D9
+#define LIGHT_SENSOR_PIN A3
 
 // Initalize the Updater client instance used to flash binary to flash memory
 Espressif_Updater<> updater;
@@ -360,7 +357,7 @@ void TaskReadAndSendTelemetryData(void *pvParameters) {
     tb.sendTelemetryData("brightness", brightness);
 
     // Water pump control
-    waterPump.pump(brightness / 4095.0 * 255);
+    // waterPump.pump(brightness / 4095.0 * 255);
 
     vTaskDelay(pdMS_TO_TICKS(SEND_TELEMETRY_INTERVAL_MS));
   }
@@ -384,12 +381,23 @@ void TaskWatering(void *pvParameters) {
                     80.0f,
                     shtc3.getTemperature(temperatureStatus),
                     30.0f);
+
+      
+      // float temperature, humidity;
+      // tempHumidSensor.get_value(temperature, humidity);
+      // pump.watering(humidity,
+      //               80.0f,
+      //               temperature,
+      //               30.0f);
+      
+      // waterPump.pump(pump.getFlowRate() / 10000.0 * 255);
       tb.sendTelemetryData("flowRate", pump.getFlowRate());
       if (!pump.isWatering()) {
         wateringFlag = false;
+        // waterPump.pump(0);
       }
     }
-    vTaskDelay(pdMS_TO_TICKS(1000)); // Simulate watering every 5 seconds
+    vTaskDelay(pdMS_TO_TICKS(1000)); // Simulate watering every 1 seconds
   }
 }
 
@@ -405,7 +413,7 @@ void TaskSHTC3Read(void *pvParameters) {
       Serial.print("SHTC3 Soil Humidity: ");
       Serial.print(soilHumidity);
       Serial.println("%");
-      tb.sendTelemetryData("soilHumidity", soilHumidity);
+      tb.sendTelemetryData("soil_moisture", soilHumidity);
     } else {
       Serial.println("------------------");
       Serial.println("Failed to read Soil Humidity from SHTC3 sensor!");
@@ -428,7 +436,7 @@ void TaskSHTC3Read(void *pvParameters) {
 constexpr char WEATHER_API_KEY[] = "2feda8f965ede8af1b286418cfe18a5e";  // Replace with your actual OpenWeatherMap API key
 constexpr float LATITUDE = 10.87999801f;
 constexpr float LONGITUDE = 106.80634192f;
-constexpr uint32_t WEATHER_UPDATE_INTERVAL_MS = 5000; // 5 seconds
+constexpr uint32_t WEATHER_UPDATE_INTERVAL_MS = 300000; // 5 seconds
 
 WeatherService weatherService(WEATHER_API_KEY, LATITUDE, LONGITUDE);
 
@@ -477,9 +485,15 @@ void setup() {
   // shct3 = SHCT3(&Serial2, 1, SERIAL_MODBUS_BAUD);
   delay(1000);
   InitWiFi();
-  tempHumidSensor.begin();
+  tempHumidSensor.begin(); 
   lightSensor.begin(LIGHT_SENSOR_PIN);
-  waterPump.begin(WATER_PUMP_PIN);
+  // waterPump.begin(WATER_PUMP_PIN);
+  
+  // for (uint16_t i = 0; i < 256; ++i) {
+  //   delay(100);
+  //   waterPump.pump(i);
+  // }
+  // waterPump.pump(10);
   
   // Increase stack sizes and adjust priorities
   xTaskCreate(TaskSHTC3Read, "SHTC3 Read Task", 4096, NULL, 2, NULL);

@@ -3,6 +3,11 @@
 
 #include <Arduino.h>
 #include <ThingsBoard.h>
+
+#define PUMP_PIN D9
+#define PUMP_POWER_MIN 50
+#define PUMP_POWER_MAX 255
+#define BRAKE_COEFFICIENT 10
 // #include <PubSubClient.h>
 // #include <ArduinoJson.h>
 // #include <scheduler.h>
