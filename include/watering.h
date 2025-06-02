@@ -22,55 +22,28 @@
 
 class WateringSystem {
     private:
-        // Sensors
-        float soilHumidityTarget; // Target soil humidity level
-        float airHumidityTarget;  // Target air humidity level
-        float airTemperatureTarget; // Target air temperature
-        float lightIntensityTarget; // Target light intensity level
-
-        float soilHumidity;      // Current soil humidity level
-        float airHumidity;       // Current air humidity level
-        float airTemperature;    // Current air temperature
-        float lightIntensity;    // Current light intensity
+        float soilHumidityTarget;
+        float soilHumidity;
         
-        // Watering System
-        bool wateringState;         // Current pump state
-        float waterAmout;          // Amount of water dispensed
-        float flowRate;            // Flow rate of the water pump
-
-        // Learning System
+        bool wateringState;
+        float flowRate;
+        
+        // PI control coefficients
         uint32_t soilHumidityCoefficient_P;
         uint32_t soilHumidityCoefficient_I;
         float soilHumidityCoefficient_Sum;
-        uint32_t airHumidityCoefficient;
-        uint32_t airTemperatureCoefficient;
-        uint32_t lightIntensityCoefficient;
 
-        float waterUsed;           // Track total water used in ml
-        unsigned long lastWateringTime; // Track time for water usage calculation
-
-    
+        float waterUsed;
+        unsigned long lastWateringTime;
 
         void pumpOn(float flowRate);
         void pumpOff();
+        void flowRateControl(float soilHumidity);
 
-        void flowRateControl(float soilHumidity, 
-                             float airHumidity, 
-                             float airTemperature, 
-                             float lightIntensity);
     public:
-        // Constructor & Destructor
-        WateringSystem(float soilHumidityTarget, 
-                       float airHumidityTarget, 
-                       float airTemperatureTarget, 
-                       float lightIntensityTarget);
-        // ~WateringSystem();
+        WateringSystem(float soilHumidityTarget);
 
-        void watering(float soilHumidity, 
-                      float airHumidity, 
-                      float airTemperature, 
-                      float lightIntensity);
-
+        void watering(float soilHumidity);
         void setWateringState(bool state);
         bool isWatering();
         float getFlowRate();

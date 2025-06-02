@@ -94,7 +94,7 @@ bool DataStorage::storeWateringData(float initialHumidity, float waterUsed) {
     return true;
 }
 
-bool DataStorage::storeWateringPackage(uint32_t timestamp, float initialHumidity, float finalHumidity, float waterUsed) {
+bool DataStorage::storeWateringPackage(float initialHumidity, float finalHumidity, float waterUsed) {
     if (!initialized) return false;
 
     StaticJsonDocument<JSON_SIZE> doc;
@@ -123,7 +123,6 @@ bool DataStorage::storeWateringPackage(uint32_t timestamp, float initialHumidity
 
     // Add new package
     JsonObject package = packages.createNestedObject();
-    package["timestamp"] = timestamp;
     package["initial_humidity"] = initialHumidity;
     package["final_humidity"] = finalHumidity;
     package["water_used"] = waterUsed;
@@ -137,20 +136,39 @@ bool DataStorage::storeWateringPackage(uint32_t timestamp, float initialHumidity
     return true;
 }
 
-String DataStorage::loadLatestData() {
-    if (!initialized) return "{}";
-
-    File file = SPIFFS.open(filename, "r");
-    if (!file) return "{}";
-
-    String data = file.readString();
-    file.close();
-    return data;
-}
-
 bool DataStorage::clearStorage() {
-    if (!initialized) return false;
-    return SPIFFS.remove(filename);
+    if (!initialized) {
+        Serial.println("Storage not initialized!");
+        return false;
+    }
+
+    // First try to remove the file
+    if (SPIFFS.remove(filename)) {
+        // Create a new empty file with initial structure
+        File file = SPIFFS.open(filename, "w");
+        if (!file) {
+            Serial.println("Failed to create new storage file!");
+            return false;
+        }
+
+        // Create empty JSON structure
+        StaticJsonDocument<JSON_SIZE> doc;
+        doc.createNestedArray("watering_packages");
+        
+        // Write empty structure to file
+        if (serializeJson(doc, file) == 0) {
+            Serial.println("Failed to write initial structure!");
+            file.close();
+            return false;
+        }
+
+        file.close();
+        Serial.println("Storage cleared successfully");
+        return true;
+    }
+
+    Serial.println("Failed to clear storage!");
+    return false;
 }
 
 void DataStorage::printStoredData() {
@@ -233,4 +251,117 @@ void DataStorage::printStorageStats() {
     Serial.printf("SPIFFS Usage: %d/%d bytes (%.1f%% used)\n",
         SPIFFS.usedBytes(), SPIFFS.totalBytes(),
         (float)SPIFFS.usedBytes() / SPIFFS.totalBytes() * 100);
+}
+
+bool DataStorage::printWateringPackage(size_t index) {
+    if (!initialized) {
+        Serial.println("Storage not initialized!");
+        return false;
+    }
+
+    StaticJsonDocument<JSON_SIZE> doc;
+    File file = SPIFFS.open(filename, "r");
+    if (!file) {
+        Serial.println("Failed to open storage file!");
+        return false;
+    }
+
+    DeserializationError error = deserializeJson(doc, file);
+    file.close();
+
+    if (error) {
+        Serial.println("Failed to parse storage data!");
+        return false;
+    }
+
+    JsonArray packages = doc["watering_packages"].as<JsonArray>();
+    if (index >= packages.size()) {
+        Serial.printf("Invalid package index! Max index: %d\n", packages.size() - 1);
+        return false;
+    }
+
+    JsonObject package = packages[index];
+    
+    Serial.println("\n=== Watering Package Data ===");
+    Serial.printf("Package Index: %d\n", index);
+    Serial.printf("Initial Humidity: %.1f%%\n", package["initial_humidity"].as<float>());
+    Serial.printf("Final Humidity: %.1f%%\n", package["final_humidity"].as<float>());
+    Serial.printf("Water Used: %.2f ml\n", package["water_used"].as<float>());
+    Serial.println("=========================\n");
+
+    return true;
+}
+
+size_t DataStorage::getWateringPackageCount() {
+    if (!initialized) return 0;
+    
+    StaticJsonDocument<JSON_SIZE> doc;
+    File file = SPIFFS.open(filename, "r");
+    if (!file) return 0;
+    
+    DeserializationError error = deserializeJson(doc, file);
+    file.close();
+    
+    if (error) return 0;
+    
+    return doc["watering_packages"].size();
+}
+
+void DataStorage::calculateWaterUsageStats() {
+    if (!initialized) {
+        Serial.println("Storage not initialized!");
+        return;
+    }
+
+    StaticJsonDocument<JSON_SIZE> doc;
+    File file = SPIFFS.open(filename, "r");
+    if (!file) {
+        Serial.println("Failed to open storage file!");
+        return;
+    }
+
+    DeserializationError error = deserializeJson(doc, file);
+    file.close();
+
+    if (error) {
+        Serial.println("Failed to parse storage data!");
+        return;
+    }
+
+    // Arrays to store sums and counts for each humidity group
+    float waterPerHumidityChange[NUM_HUMIDITY_GROUPS] = {0};
+    int groupCounts[NUM_HUMIDITY_GROUPS] = {0};
+
+    JsonArray packages = doc["watering_packages"].as<JsonArray>();
+    
+    Serial.println("\n=== Water Usage Statistics ===");
+    
+    // Process each package
+    for (JsonObject package : packages) {
+        float initialHumidity = package["initial_humidity"].as<float>();
+        float finalHumidity = package["final_humidity"].as<float>();
+        float waterUsed = package["water_used"].as<float>();
+        float humidityChange = finalHumidity - initialHumidity;
+        
+        // Determine which group this belongs to based on initial humidity
+        int groupIndex = static_cast<int>(initialHumidity / GROUP_SIZE);
+        if (groupIndex >= 0 && groupIndex < NUM_HUMIDITY_GROUPS && humidityChange > 0) {
+            waterPerHumidityChange[groupIndex] += (waterUsed / humidityChange);
+            groupCounts[groupIndex]++;
+        }
+    }
+
+    // Print results for each group
+    Serial.println("Initial Humidity Range | Avg Water/% Change | Samples");
+    Serial.println("--------------------------------------------------");
+    for (int i = 0; i < NUM_HUMIDITY_GROUPS; i++) {
+        if (groupCounts[i] > 0) {
+            float avgWaterPerChange = waterPerHumidityChange[i] / groupCounts[i];
+            Serial.printf("%3d%% - %3d%%        | %8.2f ml/%%    | %3d\n",
+                        i * 10, (i + 1) * 10,
+                        avgWaterPerChange,
+                        groupCounts[i]);
+        }
+    }
+    Serial.println("--------------------------------------------------\n");
 }

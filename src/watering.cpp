@@ -1,13 +1,7 @@
 #include "watering.h"
 
-WateringSystem::WateringSystem(float soilHumidityTarget, 
-                                 float airHumidityTarget, 
-                                 float airTemperatureTarget, 
-                                 float lightIntensityTarget) {
+WateringSystem::WateringSystem(float soilHumidityTarget) {
     this->soilHumidityTarget = soilHumidityTarget;
-    this->airHumidityTarget = airHumidityTarget;
-    this->airTemperatureTarget = airTemperatureTarget;
-    this->lightIntensityTarget = lightIntensityTarget;
 
     // Initialize coefficients
     this->soilHumidityCoefficient_P = 10;
@@ -18,14 +12,8 @@ WateringSystem::WateringSystem(float soilHumidityTarget,
     this->lastWateringTime = 0;
 }
 
-void WateringSystem::flowRateControl(float soilHumidity, 
-                                 float airHumidity, 
-                                 float airTemperature, 
-                                 float lightIntensity) {
-    this->soilHumidityCoefficient_Sum += (this->soilHumidityTarget- soilHumidity);
-    // this->airHumidityCoefficient = airHumidity - this->airHumidity;
-    // this->airTemperatureCoefficient = airTemperature - this->airTemperature;
-    // this->lightIntensityCoefficient = lightIntensity - this->lightIntensity;
+void WateringSystem::flowRateControl(float soilHumidity) {
+    this->soilHumidityCoefficient_Sum += (this->soilHumidityTarget - soilHumidity);
 
     this->flowRate = (this->soilHumidityTarget - soilHumidity) * this->soilHumidityCoefficient_P
                     + this->soilHumidityCoefficient_Sum * this->soilHumidityCoefficient_I;
@@ -36,18 +24,9 @@ void WateringSystem::flowRateControl(float soilHumidity,
     }
 }
 
-void WateringSystem::watering(float soilHumidity, 
-                         float airHumidity, 
-                         float airTemperature, 
-                         float lightIntensity) {
-    this->flowRateControl(soilHumidity, 
-                          airHumidity, 
-                          airTemperature, 
-                          lightIntensity);
+void WateringSystem::watering(float soilHumidity) {
+    this->flowRateControl(soilHumidity);
     this->soilHumidity = soilHumidity;
-    this->airHumidity = airHumidity;
-    this->airTemperature = airTemperature;
-    this->lightIntensity = lightIntensity;
 
     if (this->soilHumidity < this->soilHumidityTarget) {
         this->wateringState = true;
@@ -56,8 +35,7 @@ void WateringSystem::watering(float soilHumidity,
         // Calculate water used since last check
         unsigned long currentTime = millis();
         if (lastWateringTime > 0) {
-            // flowRate is in ml/hour, convert to ml for the time period
-            float timeHours = (currentTime - lastWateringTime) / 3600000.0f; // Convert ms to hours
+            float timeHours = (currentTime - lastWateringTime) / 3600000.0f;
             waterUsed += flowRate * timeHours;
         }
         lastWateringTime = currentTime;
@@ -65,8 +43,7 @@ void WateringSystem::watering(float soilHumidity,
         this->wateringState = false;
         this->soilHumidityCoefficient_Sum = 0;
         this->pumpOff();
-        lastWateringTime = 0; // Reset timing when pump stops
-        return;
+        lastWateringTime = 0;
     }
 }
 void WateringSystem::pumpOn(float flowRate) {
