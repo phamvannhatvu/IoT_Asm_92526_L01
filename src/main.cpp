@@ -61,17 +61,29 @@ WaterPump waterPump;
 // ESP NOW Sending
 uint8_t receiverMAC[] = {0xf8, 0xb3, 0xb7, 0x35, 0x09, 0x68};
 
-typedef struct struct_message {
+typedef struct sensor_node_to_gw_msg {
   float temperature;
   float humidity;
   float soil_moisture;
-} struct_message;
+} sensor_node_to_gw_msg;
 
-struct_message dataToSend;
+sensor_node_to_gw_msg dataToSend;
 
 void onDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
   Serial.print("Delivery status: ");
   Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Success" : "Fail");
+}
+typedef struct gw_to_sensor_node_msg {
+  bool watering;
+} gw_to_sensor_node_msg;
+
+gw_to_sensor_node_msg incomingData;
+
+void onDataRecv(const uint8_t *mac, const uint8_t *incoming, int len) {
+  memcpy(&incomingData, incoming, sizeof(incomingData));
+  wateringFlag = incomingData.watering;
+  Serial.printf("Received -> watering: %d\n",
+                incomingData.watering);
 }
 
 #define WATER_PUMP_PIN D9
@@ -186,12 +198,18 @@ void setup() {
   tempHumidSensor.begin(); 
   lightSensor.begin(LIGHT_SENSOR_PIN, LED_PIN);
   
+  WiFi.mode(WIFI_STA);  
+  // Get and print MAC address
+  String mac = WiFi.macAddress();
+  Serial.print("ESP32 MAC Address: ");
+  Serial.println(mac);
   if (esp_now_init() != ESP_OK) {
     Serial.println("ESP-NOW init failed");
     return;
   }
 
   esp_now_register_send_cb(onDataSent);
+  esp_now_register_recv_cb(onDataRecv);
 
   esp_now_peer_info_t peerInfo = {};
   memcpy(peerInfo.peer_addr, receiverMAC, 6);
