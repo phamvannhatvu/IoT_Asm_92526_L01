@@ -67,10 +67,43 @@ constexpr std::array<const char *, 2U> SHARED_ATTRIBUTES_LIST = {
   WATERING_STATE_ATTR,
   WATERING_INTERVAL_ATTR
 };
-bool wateringFlag = false;
+
+
+uint8_t receiverMAC[] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+
+typedef struct sensor_node_to_gw_msg {
+  float temperature;
+  float humidity;
+  float soil_moisture;
+} sensor_node_to_gw_msg;
+
+sensor_node_to_gw_msg incomingData;
+
+void onDataRecv(const uint8_t *mac, const uint8_t *incoming, int len) {
+  memcpy(&incomingData, incoming, sizeof(incomingData));
+  Serial.printf("Received -> temperature: %d, humidity: %.2f, soil_moisture: %.2f\n",
+                incomingData.temperature, incomingData.humidity, incomingData.soil_moisture);
+}
+
+typedef struct gw_to_sensor_node_msg {
+  bool watering;
+} gw_to_sensor_node_msg;
+
+gw_to_sensor_node_msg dataToSend;
+
+void onDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+  Serial.print("Delivery status: ");
+  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Success" : "Fail");
+}
+
 void watering(const JsonVariantConst& variant, JsonDocument& document) {
   Serial.println("watering is called");
-  wateringFlag = true;
+  dataToSend.watering = true;
+  esp_err_t result = esp_now_send(receiverMAC, (uint8_t *)&dataToSend, sizeof(dataToSend));
+  if (result != ESP_OK) {
+    Serial.println("Error sending the data");
+  }
+
   const size_t jsonSize = Helper::Measure_Json(variant);
   char buffer[jsonSize];
   serializeJson(variant, buffer, jsonSize);
@@ -80,21 +113,6 @@ void watering(const JsonVariantConst& variant, JsonDocument& document) {
 const std::array<RPC_Callback, 1U> RPC_CALLBACK = {
     RPC_Callback{"watering", watering}
 };
-
-// ESP-NOW receiving
-typedef struct struct_message {
-  float temperature;
-  float humidity;
-  float soil_moisture;
-} struct_message;
-
-struct_message incomingData;
-
-void onDataRecv(const uint8_t *mac, const uint8_t *incoming, int len) {
-  memcpy(&incomingData, incoming, sizeof(incomingData));
-  Serial.printf("Received -> temperature: %d, humidity: %.2f, soil_moisture: %.2f\n",
-                incomingData.temperature, incomingData.humidity, incomingData.soil_moisture);
-}
 
 // Initalize the Updater client instance used to flash binary to flash memory
 Espressif_Updater<> updater;
@@ -408,8 +426,18 @@ void setup() {
     Serial.println("ESP-NOW init failed");
     return;
   }
-
+  esp_now_register_send_cb(onDataSent);
   esp_now_register_recv_cb(onDataRecv);
+  esp_now_peer_info_t peerInfo = {};
+  memcpy(peerInfo.peer_addr, receiverMAC, 6);
+  peerInfo.channel = 0;
+  peerInfo.encrypt = false;
+
+  if (esp_now_add_peer(&peerInfo) != ESP_OK) {
+    Serial.println("Failed to add peer");
+    return;
+  }
+  dataToSend.watering = false;
 
   // for (uint16_t i = 0; i < 256; ++i) {
   //   delay(100);
