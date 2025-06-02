@@ -28,13 +28,15 @@ class WateringSystem {
         bool wateringState;
         float flowRate;
         
+        // Flow rate tracking
+        unsigned long startTime;
+        float totalFlowRate;
+        int flowRateCount;
+        
         // PI control coefficients
         uint32_t soilHumidityCoefficient_P;
         uint32_t soilHumidityCoefficient_I;
         float soilHumidityCoefficient_Sum;
-
-        float waterUsed;
-        unsigned long lastWateringTime;
 
         void pumpOn(float flowRate);
         void pumpOff();
@@ -44,11 +46,10 @@ class WateringSystem {
         WateringSystem(float soilHumidityTarget);
 
         void watering(float soilHumidity);
-        void setWateringState(bool state);
-        bool isWatering();
-        float getFlowRate();
-        float getWaterUsed() const { return waterUsed; }
-        void resetWaterUsed() { waterUsed = 0.0f; }
+        bool isWatering() const { return wateringState; }
+        float getFlowRate() const { return flowRate; }
+        float getAverageFlowRate() const;
+        unsigned long getWateringDuration() const;
 };
 
 #endif // WATERING_H

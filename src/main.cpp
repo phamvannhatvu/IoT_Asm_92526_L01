@@ -290,18 +290,24 @@ void TaskWatering(void *pvParameters) {
             // Store complete package when watering cycle ends
             if (!pump.isWatering() && wateringFlag && cycleStarted) {
                 float finalHumidity = soilHumidity;
+                float avgFlowRate = pump.getAverageFlowRate();
+                unsigned long duration = pump.getWateringDuration();
+                
                 // Store complete watering package
                 storage.storeWateringPackage(
                     initialHumidity,
                     finalHumidity,
-                    pump.getWaterUsed()
+                    avgFlowRate,
+                    duration
                 );
                 
                 Serial.println("------------------");
                 Serial.println("Watering cycle completed");
                 Serial.printf("Initial humidity: %.1f%%\n", initialHumidity);
                 Serial.printf("Final humidity: %.1f%%\n", finalHumidity);
-                Serial.printf("Total water used: %.2f ml\n", pump.getWaterUsed());
+                Serial.printf("Average flow rate: %.3f ml/s\n", avgFlowRate);
+                Serial.printf("Duration: %.1f seconds\n", duration / 1000.0f);
+                
                 wateringFlag = false;
                 cycleStarted = false;
             }
@@ -406,22 +412,18 @@ constexpr uint32_t STATS_UPDATE_INTERVAL_MS = 10000; // 10 seconds
 constexpr uint8_t PACKAGES_PER_PAGE = 3;  // Number of packages to show per interval
 
 void TaskPeriodicStats(void *pvParameters) {
-    static size_t currentPackageIndex = 0;
-    
     while(1) {
         Serial.println("\n=== Storage Statistics ===");
         
         // Show storage info
         storage.printStorageStats();
         
-        // Show latest watering package
+        // Show latest watering package and calculate statistics
         size_t packageCount = storage.getWateringPackageCount();
         if (packageCount > 0) {
-            // Serial.println("\nLatest Watering Package:");
-            // storage.printWateringPackage(packageCount - 1);
-            
-            // // Calculate and show water usage statistics
-            storage.calculateWaterUsageStats();
+            // Calculate and show flow rate statistics by humidity range
+            storage.calculateFlowRateStats();
+            storage.printWateringPackage(0);
         }
         
         Serial.println("\nSystem Uptime:");

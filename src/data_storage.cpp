@@ -94,7 +94,8 @@ bool DataStorage::storeWateringData(float initialHumidity, float waterUsed) {
     return true;
 }
 
-bool DataStorage::storeWateringPackage(float initialHumidity, float finalHumidity, float waterUsed) {
+bool DataStorage::storeWateringPackage(float initialHumidity, float finalHumidity, 
+                                     float avgFlowRate, unsigned long duration) {
     if (!initialized) return false;
 
     StaticJsonDocument<JSON_SIZE> doc;
@@ -121,11 +122,12 @@ bool DataStorage::storeWateringPackage(float initialHumidity, float finalHumidit
         packages.remove(0);
     }
 
-    // Add new package
+    // Add new package with flow rate and duration instead of water used
     JsonObject package = packages.createNestedObject();
     package["initial_humidity"] = initialHumidity;
     package["final_humidity"] = finalHumidity;
-    package["water_used"] = waterUsed;
+    package["avg_flow_rate"] = avgFlowRate;     // Store flow rate in ml/s
+    package["duration"] = duration;              // Store duration in milliseconds
 
     // Save to file
     file = SPIFFS.open(filename, "w");
@@ -286,7 +288,8 @@ bool DataStorage::printWateringPackage(size_t index) {
     Serial.printf("Package Index: %d\n", index);
     Serial.printf("Initial Humidity: %.1f%%\n", package["initial_humidity"].as<float>());
     Serial.printf("Final Humidity: %.1f%%\n", package["final_humidity"].as<float>());
-    Serial.printf("Water Used: %.2f ml\n", package["water_used"].as<float>());
+    Serial.printf("Average Flow Rate: %.3f ml/s\n", package["avg_flow_rate"].as<float>());
+    Serial.printf("Duration: %.1f seconds\n", package["duration"].as<float>() / 1000.0f);
     Serial.println("=========================\n");
 
     return true;
@@ -360,6 +363,69 @@ void DataStorage::calculateWaterUsageStats() {
             Serial.printf("%3d%% - %3d%%        | %8.2f ml/%%    | %3d\n",
                         i * 10, (i + 1) * 10,
                         avgWaterPerChange,
+                        groupCounts[i]);
+        }
+    }
+    Serial.println("--------------------------------------------------\n");
+}
+
+void DataStorage::calculateFlowRateStats() {
+    if (!initialized) {
+        Serial.println("Storage not initialized!");
+        return;
+    }
+
+    StaticJsonDocument<JSON_SIZE> doc;
+    File file = SPIFFS.open(filename, "r");
+    if (!file) {
+        Serial.println("Failed to open storage file!");
+        return;
+    }
+
+    DeserializationError error = deserializeJson(doc, file);
+    file.close();
+
+    if (error) {
+        Serial.println("Failed to parse storage data!");
+        return;
+    }
+
+    // Arrays for storing group statistics
+    float totalFlowRates[NUM_HUMIDITY_GROUPS] = {0};
+    unsigned long totalDurations[NUM_HUMIDITY_GROUPS] = {0};
+    int groupCounts[NUM_HUMIDITY_GROUPS] = {0};
+
+    JsonArray packages = doc["watering_packages"].as<JsonArray>();
+    
+    Serial.println("\n=== Flow Rate Statistics by Humidity Range ===");
+    
+    // Process each package
+    for (JsonObject package : packages) {
+        float initialHumidity = package["initial_humidity"].as<float>();
+        float avgFlowRate = package["avg_flow_rate"].as<float>();
+        unsigned long duration = package["duration"].as<unsigned long>();
+        
+        // Determine group index (0-9 for 0-100% humidity)
+        int groupIndex = static_cast<int>(initialHumidity / GROUP_SIZE);
+        if (groupIndex >= 0 && groupIndex < NUM_HUMIDITY_GROUPS) {
+            totalFlowRates[groupIndex] += avgFlowRate;
+            totalDurations[groupIndex] += duration;
+            groupCounts[groupIndex]++;
+        }
+    }
+
+    // Print results for each group
+    Serial.println("Init Humidity | Flow Rate (ml/s) | Avg Time (s) | Samples");
+    Serial.println("--------------------------------------------------");
+    for (int i = 0; i < NUM_HUMIDITY_GROUPS; i++) {
+        if (groupCounts[i] > 0) {
+            float avgFlowRate = totalFlowRates[i] / groupCounts[i];
+            float avgSeconds = (totalDurations[i] / 1000.0f) / groupCounts[i]; // Calculate average time
+            
+            Serial.printf("%2d%% - %3d%% | %10.3f     | %7.1f    | %3d\n",
+                        i * 10, (i + 1) * 10,
+                        avgFlowRate,
+                        avgSeconds,
                         groupCounts[i]);
         }
     }

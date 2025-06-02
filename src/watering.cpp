@@ -2,14 +2,18 @@
 
 WateringSystem::WateringSystem(float soilHumidityTarget) {
     this->soilHumidityTarget = soilHumidityTarget;
-
+    
     // Initialize coefficients
     this->soilHumidityCoefficient_P = 10;
     this->soilHumidityCoefficient_I = 10;
     this->soilHumidityCoefficient_Sum = 0;
-
-    this->waterUsed = 0.0f;
-    this->lastWateringTime = 0;
+    
+    // Initialize flow rate tracking
+    this->startTime = 0;
+    this->totalFlowRate = 0;
+    this->flowRateCount = 0;
+    this->wateringState = false;
+    this->flowRate = 0;
 }
 
 void WateringSystem::flowRateControl(float soilHumidity) {
@@ -29,44 +33,43 @@ void WateringSystem::watering(float soilHumidity) {
     this->soilHumidity = soilHumidity;
 
     if (this->soilHumidity < this->soilHumidityTarget) {
+        if (!this->wateringState) {
+            // Start new watering cycle
+            this->startTime = millis();
+            this->totalFlowRate = 0;
+            this->flowRateCount = 0;
+        }
+        
         this->wateringState = true;
         this->pumpOn(this->flowRate);
         
-        // Calculate water used since last check
-        unsigned long currentTime = millis();
-        if (lastWateringTime > 0) {
-            float timeHours = (currentTime - lastWateringTime) / 3600000.0f;
-            waterUsed += flowRate * timeHours;
-        }
-        lastWateringTime = currentTime;
+        // Track flow rate
+        this->totalFlowRate += this->flowRate;
+        this->flowRateCount++;
     } else {
         this->wateringState = false;
         this->soilHumidityCoefficient_Sum = 0;
         this->pumpOff();
-        lastWateringTime = 0;
     }
 }
+
+float WateringSystem::getAverageFlowRate() const {
+    return flowRateCount > 0 ? totalFlowRate / flowRateCount : 0;
+}
+
+unsigned long WateringSystem::getWateringDuration() const {
+    return wateringState ? (millis() - startTime) : (startTime > 0 ? millis() - startTime : 0);
+}
+
 void WateringSystem::pumpOn(float flowRate) {
     // Simulate pump on with the given flow rate
     Serial.print("Pump is ON with flow rate: ");
     Serial.println(flowRate);
 }
+
 void WateringSystem::pumpOff() {
     // Simulate pump off
     Serial.println("Pump is OFF");
-    Serial.print("Total water used: ");
-    Serial.print(waterUsed);
-    Serial.println(" ml");
-}
-
-void WateringSystem::setWateringState(bool state) {
-    this->wateringState = state;
-}
-
-bool WateringSystem::isWatering() {
-    return this->wateringState;
-}
-
-float WateringSystem::getFlowRate() {
-    return this->flowRate;
+    float avgFlowRate = this->getAverageFlowRate();
+    Serial.printf("Average flow rate: %.2f ml/s\n", avgFlowRate);
 }
