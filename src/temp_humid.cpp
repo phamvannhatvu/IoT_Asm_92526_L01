@@ -7,7 +7,7 @@ void TempHumidSensor::begin() {
 }
 
 void TempHumidSensor::get_value(float &temp, float &humid) {
-    // dht20.read();
-    temp = analogRead(36) / 4095.0 * 50;// dht20.getTemperature();
-    humid = analogRead(36) / 4095.0 * 100;// dht20.getHumidity();          
+    dht20.read();
+    temp = dht20.getTemperature();
+    humid = dht20.getHumidity();          
 }
