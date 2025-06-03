@@ -59,7 +59,7 @@ LightSensor  lightSensor;
 WaterPump waterPump;
 
 // ESP NOW Sending
-uint8_t receiverMAC[] = {0xf8, 0xb3, 0xb7, 0x35, 0x09, 0x68};
+uint8_t receiverMAC[] = {0x4c, 0x11, 0xae, 0xd7, 0x6c, 0x04};
 
 typedef struct sensor_node_to_gw_msg {
   float temperature;
