@@ -15,6 +15,7 @@
 #include <esp_smartconfig.h>
 #include <esp_now.h>
 #include <Espressif_Updater.h>
+#include "esp_wifi.h"
 #include "weather_service.h"
 
 #define SMARTCONFIG_TIMEOUT 1
@@ -69,7 +70,7 @@ constexpr std::array<const char *, 2U> SHARED_ATTRIBUTES_LIST = {
 };
 
 
-uint8_t receiverMAC[] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+uint8_t receiverMAC[] = {0xB4, 0xE6, 0x2D, 0xD5, 0x5A, 0x55};
 
 typedef struct sensor_node_to_gw_msg {
   float temperature;
@@ -81,7 +82,7 @@ sensor_node_to_gw_msg incomingData;
 
 void onDataRecv(const uint8_t *mac, const uint8_t *incoming, int len) {
   memcpy(&incomingData, incoming, sizeof(incomingData));
-  Serial.printf("Received -> temperature: %d, humidity: %.2f, soil_moisture: %.2f\n",
+  Serial.printf("Received -> temperature: %.2f, humidity: %.2f, soil_moisture: %.2f\n",
                 incomingData.temperature, incomingData.humidity, incomingData.soil_moisture);
 }
 
@@ -445,6 +446,14 @@ void setup() {
   // }
   // waterPump.pump(10);
   
+  // Print current Wi-Fi channel
+  uint8_t channel;
+  wifi_second_chan_t second;
+  esp_wifi_get_channel(&channel, &second);
+  Serial.printf("Wi-Fi channel: %d\n", channel);
+  esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N);
+  esp_wifi_set_ps(WIFI_PS_NONE);
+
   // Increase stack sizes and adjust priorities
   xTaskCreate(TaskCheckWiFiConnection, "Check WiFi connection", 4096, NULL, 4, NULL);
   xTaskCreate(TaskCheckTBConnection, "Check Thingsboard connection", 8192, NULL, 4, NULL);
