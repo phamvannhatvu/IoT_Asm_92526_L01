@@ -165,11 +165,9 @@ bool DataStorage::clearStorage() {
         }
 
         file.close();
-        Serial.println("Storage cleared successfully");
         return true;
     }
 
-    Serial.println("Failed to clear storage!");
     return false;
 }
 
@@ -370,6 +368,11 @@ void DataStorage::calculateWaterUsageStats() {
 }
 
 void DataStorage::calculateFlowRateStats() {
+    // Reset all group stats
+    for (int i = 0; i < NUM_HUMIDITY_GROUPS; i++) {
+        groupStats[i] = {0, 0, 0, false};
+    }
+
     if (!initialized) {
         Serial.println("Storage not initialized!");
         return;
@@ -405,7 +408,6 @@ void DataStorage::calculateFlowRateStats() {
         float avgFlowRate = package["avg_flow_rate"].as<float>();
         unsigned long duration = package["duration"].as<unsigned long>();
         
-        // Determine group index (0-9 for 0-100% humidity)
         int groupIndex = static_cast<int>(initialHumidity / GROUP_SIZE);
         if (groupIndex >= 0 && groupIndex < NUM_HUMIDITY_GROUPS) {
             totalFlowRates[groupIndex] += avgFlowRate;
@@ -420,8 +422,14 @@ void DataStorage::calculateFlowRateStats() {
     for (int i = 0; i < NUM_HUMIDITY_GROUPS; i++) {
         if (groupCounts[i] > 0) {
             float avgFlowRate = totalFlowRates[i] / groupCounts[i];
-            float avgSeconds = (totalDurations[i] / 1000.0f) / groupCounts[i]; // Calculate average time
+            float avgSeconds = (totalDurations[i] / 1000.0f) / groupCounts[i];
             
+            // Store stats in member variable
+            groupStats[i].avgFlowRate = avgFlowRate;
+            groupStats[i].avgTime = avgSeconds;
+            groupStats[i].samples = groupCounts[i];
+            groupStats[i].hasData = true;
+
             Serial.printf("%2d%% - %3d%% | %10.3f     | %7.1f    | %3d\n",
                         i * 10, (i + 1) * 10,
                         avgFlowRate,
@@ -429,5 +437,13 @@ void DataStorage::calculateFlowRateStats() {
                         groupCounts[i]);
         }
     }
-    Serial.println("--------------------------------------------------\n");
+    Serial.println("--------------------------------------------------");
+}
+
+HumidityGroupStats DataStorage::getStatsForHumidityRange(float humidity) const {
+    int groupIndex = static_cast<int>(humidity / GROUP_SIZE);
+    if (groupIndex >= 0 && groupIndex < NUM_HUMIDITY_GROUPS) {
+        return groupStats[groupIndex];
+    }
+    return {0, 0, 0, false};
 }

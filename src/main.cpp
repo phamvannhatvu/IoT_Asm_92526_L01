@@ -95,8 +95,18 @@ void watering(const JsonVariantConst& variant, JsonDocument& document) {
   Serial.println(buffer);
 }
 
-const std::array<RPC_Callback, 1U> RPC_CALLBACK = {
-    RPC_Callback{"watering", watering}
+void clearData(const JsonVariantConst& variant, JsonDocument& document) {
+  Serial.println("clearData is called");
+  clearDataFlag = true;
+  const size_t jsonSize = Helper::Measure_Json(variant);
+  char buffer[jsonSize];
+  serializeJson(variant, buffer, jsonSize);
+  Serial.println(buffer);
+}
+
+const std::array<RPC_Callback, 2U> RPC_CALLBACK = {
+    RPC_Callback{"watering", watering},
+    RPC_Callback{"clearData", clearData}
 };
 
 TempHumidSensor tempHumidSensor;
@@ -383,6 +393,8 @@ void TaskTBloop(void *pvParameters) {
 
 float soilHumidity = 0;
 float soilTemperature = 0;
+HumidityGroupStats humidityStats[10];  // Array to store stats for all groups
+bool statsUpdated = false;
 
 void TaskWatering(void *pvParameters) {
     while(1) {
@@ -393,20 +405,31 @@ void TaskWatering(void *pvParameters) {
             // Store initial data when starting a new watering cycle
             if (!cycleStarted) {
                 initialHumidity = soilHumidity;
+                
+                // Get stats for current humidity level
+                // int groupIndex = static_cast<int>(soilHumidity / 10.0f);
+                // if (statsUpdated && humidityStats[groupIndex].hasData) {
+                //     Serial.printf("Historical data for %d%% - %d%% humidity:\n", 
+                //                 groupIndex * 10, (groupIndex + 1) * 10);
+                //     Serial.printf("Avg Flow Rate: %.1f ml/h\n", humidityStats[groupIndex].avgFlowRate);
+                //     Serial.printf("Avg Time: %.1f s\n", humidityStats[groupIndex].avgTime);
+                //     Serial.printf("Sample Count: %d\n", humidityStats[groupIndex].samples);
+                // }
+                
                 cycleStarted = true;
                 Serial.println("------------------");
                 Serial.println("Starting watering cycle");
                 Serial.printf("Initial soil humidity: %.1f%%\n", initialHumidity);
             }
             
-            // Normal watering process
-            pump.watering(soilHumidity);
-            tb.sendTelemetryData("flowRate", pump.getFlowRate());
+            // Normal watering process with historical data
+            pump.watering(soilHumidity, humidityStats[static_cast<int>(soilHumidity / 10.0f)]);
+            tb.sendTelemetryData("flowRate", pump.getFlowRate()); // Keep in ml/h
                          
             // Store complete package when watering cycle ends
             if (!pump.isWatering() && wateringFlag && cycleStarted) {
                 float finalHumidity = soilHumidity;
-                float avgFlowRate = pump.getAverageFlowRate();
+                float avgFlowRate = pump.getAverageFlowRate(); // Keep in ml/h
                 unsigned long duration = pump.getWateringDuration();
                 
                 // Store complete watering package
@@ -421,7 +444,7 @@ void TaskWatering(void *pvParameters) {
                 Serial.println("Watering cycle completed");
                 Serial.printf("Initial humidity: %.1f%%\n", initialHumidity);
                 Serial.printf("Final humidity: %.1f%%\n", finalHumidity);
-                Serial.printf("Average flow rate: %.3f ml/s\n", avgFlowRate);
+                Serial.printf("Average flow rate: %.1f ml/h\n", avgFlowRate);
                 Serial.printf("Duration: %.1f seconds\n", duration / 1000.0f);
                 
                 wateringFlag = false;
@@ -539,6 +562,16 @@ void TaskPeriodicStats(void *pvParameters) {
         if (packageCount > 0) {
             // Calculate and show flow rate statistics by humidity range
             storage.calculateFlowRateStats();
+            
+            // Get updated stats
+            const HumidityGroupStats* newStats = storage.getAllStats();
+            // Copy to global array
+            for (int i = 0; i < DataStorage::NUM_HUMIDITY_GROUPS; i++) {
+                humidityStats[i] = newStats[i];
+            }
+            statsUpdated = true;
+            
+            // Print latest package
             storage.printWateringPackage(0);
         }
         
