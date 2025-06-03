@@ -33,7 +33,7 @@ constexpr int DAYLIGHT_OFFSET_SEC = 0;     // No daylight savings time in Vietna
 constexpr char WIFI_SSID[] = "Oreki";
 constexpr char WIFI_PASSWORD[] = "hardware";
 
-constexpr char TOKEN[] = "gd63iniu7du1xm4zetoh";
+constexpr char TOKEN[] = "I6CQCDQxVfWAU2uezJeZ";
 
 constexpr char THINGSBOARD_SERVER[] = "app.coreiot.io";
 constexpr uint16_t THINGSBOARD_PORT = 1883U;
@@ -132,7 +132,7 @@ constexpr uint16_t MAX_MESSAGE_SEND_SIZE = 512U;
 constexpr uint16_t MAX_MESSAGE_RECEIVE_SIZE = 512U;
 WiFiClient wifiClient;
 Arduino_MQTT_Client mqttClient(wifiClient);
-Server_Side_RPC<> server_side_rpc;
+// Server_Side_RPC<> server_side_rpc;
 const std::array<IAPI_Implementation*, 4U> apis = {
     &shared_update,
     &attr_request,
