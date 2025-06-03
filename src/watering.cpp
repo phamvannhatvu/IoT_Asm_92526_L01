@@ -4,8 +4,8 @@ WateringSystem::WateringSystem(float soilHumidityTarget) {
     this->soilHumidityTarget = soilHumidityTarget;
     
     // Initialize coefficients
-    this->soilHumidityCoefficient_P = 10;
-    this->soilHumidityCoefficient_I = 10;
+    this->soilHumidityCoefficient_P = 1;
+    this->soilHumidityCoefficient_I = 1;
     this->soilHumidityCoefficient_Sum = 0;
     
     // Initialize flow rate tracking
@@ -14,17 +14,29 @@ WateringSystem::WateringSystem(float soilHumidityTarget) {
     this->flowRateCount = 0;
     this->wateringState = false;
     this->flowRate = 0;
+
+    this->pumpOff();
 }
 
 void WateringSystem::flowRateControl(float soilHumidity) {
     this->soilHumidityCoefficient_Sum += (this->soilHumidityTarget - soilHumidity);
+}
+
+void WateringSystem::flowRateControl(float soilHumidity, 
+                                 float airHumidity, 
+                                 float airTemperature, 
+                                 float lightIntensity) {
+    this->soilHumidityCoefficient_Sum += (this->soilHumidityTarget - BRAKE_COEFFICIENT - soilHumidity);
+    // this->airHumidityCoefficient = airHumidity - this->airHumidity;
+    // this->airTemperatureCoefficient = airTemperature - this->airTemperature;
+    // this->lightIntensityCoefficient = lightIntensity - this->lightIntensity;
 
     this->flowRate = (this->soilHumidityTarget - soilHumidity) * this->soilHumidityCoefficient_P
                     + this->soilHumidityCoefficient_Sum * this->soilHumidityCoefficient_I;
-    if (this->flowRate > 10000) {
-        this->flowRate = 10000;
-    } else if (this->flowRate < 0) {
-        this->flowRate = 0;
+    if (this->flowRate > PUMP_POWER_MAX) {
+        this->flowRate = PUMP_POWER_MAX;
+    } else if (this->flowRate < PUMP_POWER_MIN) {
+        this->flowRate = PUMP_POWER_MIN;
     }
 }
 
@@ -65,11 +77,13 @@ void WateringSystem::pumpOn(float flowRate) {
     // Simulate pump on with the given flow rate
     Serial.print("Pump is ON with flow rate: ");
     Serial.println(flowRate);
+    analogWrite(PUMP_PIN, flowRate);
 }
 
 void WateringSystem::pumpOff() {
     // Simulate pump off
     Serial.println("Pump is OFF");
+    analogWrite(PUMP_PIN, 0);
     float avgFlowRate = this->getAverageFlowRate();
     Serial.printf("Average flow rate: %.2f ml/s\n", avgFlowRate);
 }

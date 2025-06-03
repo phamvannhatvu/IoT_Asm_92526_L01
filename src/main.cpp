@@ -1,8 +1,9 @@
 #include <WiFi.h>
 #include <Arduino_MQTT_Client.h>
 #include <ThingsBoard.h>
-#include "DHT20.h"
-#include "Wire.h"
+#include "temp_humid.h"
+#include "light.h"
+#include "water_pump.h"
 #include <ArduinoOTA.h>
 #include "scheduler.h"
 #include "watering.h"
@@ -11,6 +12,8 @@
 #include <Server_Side_RPC.h>
 #include <Shared_Attribute_Update.h>
 #include "shtc3.h"
+#include <esp_smartconfig.h>
+#include <Espressif_Updater.h>
 #include "weather_service.h"
 #include "data_storage.h"
 #include <time.h>
@@ -25,10 +28,12 @@ constexpr int DAYLIGHT_OFFSET_SEC = 0;     // No daylight savings time in Vietna
 #define MODBUS_DE_PINOUT 27
 #define MODBUS_RE_PINOUT 14
 
+#define SMARTCONFIG_TIMEOUT 1
+
 constexpr char WIFI_SSID[] = "Oreki";
 constexpr char WIFI_PASSWORD[] = "hardware";
 
-constexpr char TOKEN[] = "I6CQCDQxVfWAU2uezJeZ";
+constexpr char TOKEN[] = "gd63iniu7du1xm4zetoh";
 
 constexpr char THINGSBOARD_SERVER[] = "app.coreiot.io";
 constexpr uint16_t THINGSBOARD_PORT = 1883U;
@@ -37,6 +42,7 @@ constexpr uint16_t THINGSBOARD_PORT = 1883U;
 constexpr uint16_t WIFI_CONNECT_CHECKING_INTERVAL_MS = 10000U;
 constexpr uint16_t TB_CONNECT_CHECKING_INTERVAL_MS = 10000U;
 constexpr uint16_t TB_LOOP_INTERVAL_MS = 10U;
+constexpr uint16_t OTA_UPDATE_INTERVAL_MS = 100U;
 constexpr uint16_t SEND_TELEMETRY_INTERVAL_MS = 1000U;
 constexpr uint32_t SERIAL_DEBUG_BAUD = 9600U;
 constexpr uint32_t SERIAL_MODBUS_BAUD = 4800U;
@@ -89,26 +95,44 @@ void watering(const JsonVariantConst& variant, JsonDocument& document) {
   Serial.println(buffer);
 }
 
-void clearData(const JsonVariantConst& variant, JsonDocument& document) {
-    Serial.println("clearData is called");
-    clearDataFlag = true;
-    const size_t jsonSize = Helper::Measure_Json(variant);
-    char buffer[jsonSize];
-    serializeJson(variant, buffer, jsonSize);
-    Serial.println(buffer);
-}
-
-const std::array<RPC_Callback, 2U> RPC_CALLBACK = {
-    RPC_Callback{"watering", watering},
-    RPC_Callback{"clearData", clearData}
+const std::array<RPC_Callback, 1U> RPC_CALLBACK = {
+    RPC_Callback{"watering", watering}
 };
 
-WiFiClient wifiClient;
-Arduino_MQTT_Client mqttClient(wifiClient);
+TempHumidSensor tempHumidSensor;
+LightSensor  lightSensor;
+WaterPump waterPump;
+
+#define WATER_PUMP_PIN D9
+#define LIGHT_SENSOR_PIN A3
+
+// Initalize the Updater client instance used to flash binary to flash memory
+Espressif_Updater<> updater;
+// Statuses for updating
+bool currentFWSent = false;
+bool updateRequestSent = false;
+// Initialize used apis
 OTA_Firmware_Update<> ota;
 Shared_Attribute_Update<1U, MAX_ATTRIBUTES> shared_update;
 Server_Side_RPC<2, 2> server_side_rpc;
 Attribute_Request<2U, MAX_ATTRIBUTES> attr_request;
+
+// Firmware title and version used to compare with remote version, to check if an update is needed.
+// Title needs to be the same and version needs to be different --> downgrading is possible
+constexpr char CURRENT_FIRMWARE_TITLE[] = "SmartAgriculture";
+constexpr char CURRENT_FIRMWARE_VERSION[] = "1.0";
+// Maximum amount of retries we attempt to download each firmware chunck over MQTT
+constexpr uint8_t FIRMWARE_FAILURE_RETRIES = 12U;
+// Size of each firmware chunck downloaded over MQTT,
+// increased packet size, might increase download speed
+constexpr uint16_t FIRMWARE_PACKET_SIZE = 4096U;
+
+// Initialize ThingsBoard instance with the maximum needed buffer size
+constexpr uint16_t MAX_MESSAGE_SEND_SIZE = 512U;
+constexpr uint16_t MAX_MESSAGE_RECEIVE_SIZE = 512U;
+WiFiClient wifiClient;
+Arduino_MQTT_Client mqttClient(wifiClient);
+Server_Side_RPC<> server_side_rpc;
 const std::array<IAPI_Implementation*, 4U> apis = {
     &shared_update,
     &attr_request,
@@ -155,15 +179,51 @@ void processSharedAttribute(const JsonObjectConst &data) {
 }
 
 void InitWiFi() {
-  Serial.println("Connecting to AP ...");
-  // Attempting to establish a connection to the given WiFi network
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  while (WiFi.status() != WL_CONNECTED) {
-    // Delay 500ms until a connection has been successfully established
+  WiFi.mode(WIFI_STA);
+
+  // Start SmartConfig
+  WiFi.beginSmartConfig();
+  Serial.println("Waiting for SmartConfig...");
+
+  unsigned long startTime = millis();
+  bool smartConfigReceived = false;
+
+  // Wait for SmartConfig or timeout
+  while (millis() - startTime < SMARTCONFIG_TIMEOUT * 1000) {
+    if (WiFi.smartConfigDone()) {
+      smartConfigReceived = true;
+      Serial.println("SmartConfig received.");
+      break;
+    }
     delay(500);
     Serial.print(".");
   }
-  Serial.println("Connected to AP");
+
+  if (smartConfigReceived) {
+    // Wait for Wi-Fi to connect using SmartConfig credentials
+    while (WiFi.status() != WL_CONNECTED) {
+      delay(500);
+      Serial.print("*");
+    }
+    Serial.println("\nConnected to Wi-Fi via SmartConfig: " + WiFi.SSID());
+  } else {
+    Serial.println("\nSmartConfig timeout. Attempting to reconnect to saved Wi-Fi...");
+
+    WiFi.stopSmartConfig();  // Stop SmartConfig if active
+    WiFi.begin();            // Attempt connection using saved credentials
+
+    int retry = 0;
+    while (WiFi.status() != WL_CONNECTED && retry++ < 20) {
+      delay(500);
+      Serial.print("#");
+    }
+
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.println("\nReconnected to saved Wi-Fi: " + WiFi.SSID());
+    } else {
+      Serial.println("\nFailed to connect to any Wi-Fi network.");
+    }
+  }
 }
 
 void CheckTBConnection() {
@@ -180,7 +240,51 @@ void CheckTBConnection() {
   }
 }
 
+// OTA Callbacks
+void update_starting_callback() {
+  Serial.println("Start OTA updating");
+}
+
+void finished_callback(const bool & success) {
+  if (success) {
+    Serial.println("Done, Reboot now");
+    esp_restart();
+    return;
+  }
+  Serial.println("Downloading firmware failed");
+  updateRequestSent = false;
+}
+
+void progress_callback(const size_t & current, const size_t & total) {
+  Serial.printf("Progress %.2f%%\n", static_cast<float>(current * 100U) / total);
+}
+
 /* Free RTOS Tasks */
+void TaskOTAUpdate(void *pvParameters) {
+  while(1) {
+    if (tb.connected())
+    {
+      if (!currentFWSent) {
+        currentFWSent = ota.Firmware_Send_Info(CURRENT_FIRMWARE_TITLE, CURRENT_FIRMWARE_VERSION);
+      }
+
+      if (!updateRequestSent) {
+        Serial.print(CURRENT_FIRMWARE_TITLE);
+        Serial.println(CURRENT_FIRMWARE_VERSION);
+        Serial.println("Firwmare Update ...");
+        const OTA_Update_Callback callback(CURRENT_FIRMWARE_TITLE, CURRENT_FIRMWARE_VERSION, &updater, &finished_callback, &progress_callback, &update_starting_callback, FIRMWARE_FAILURE_RETRIES, FIRMWARE_PACKET_SIZE);
+        updateRequestSent = ota.Start_Firmware_Update(callback);
+        if(updateRequestSent) {
+          delay(500);
+          Serial.println("Firwmare Update Subscription...");
+          updateRequestSent = ota.Subscribe_Firmware_Update(callback);
+        }
+      }
+    }
+    vTaskDelay(pdMS_TO_TICKS(OTA_UPDATE_INTERVAL_MS));
+  }
+}
+
 void TaskCheckWiFiConnection(void *pvParameters) {
   while(1) {
     // Check to ensure we aren't connected yet
@@ -237,10 +341,12 @@ void TaskCheckTBConnection(void *pvParameters) {
 
 void TaskReadAndSendTelemetryData(void *pvParameters) {
   while(1) {
-    // dht20.read();
     
+    // Humidity and temperature
     float temperature = 25;//dht20.getTemperature();
     float humidity = 50;//dht20.getHumidity();
+
+    tempHumidSensor.get_value(temperature, humidity);
 
     if (isnan(temperature) || isnan(humidity)) {
       Serial.println("Failed to read from DHT20 sensor!");
@@ -254,6 +360,16 @@ void TaskReadAndSendTelemetryData(void *pvParameters) {
       tb.sendTelemetryData("temperature", temperature);
       tb.sendTelemetryData("humidity", humidity);
     }
+
+    // Brightness
+    uint32_t brightness = lightSensor.getBrightness();
+    Serial.print("Brightness: ");
+    Serial.println(brightness);
+    tb.sendTelemetryData("brightness", brightness);
+
+    // Water pump control
+    // waterPump.pump(brightness / 4095.0 * 255);
+
     vTaskDelay(pdMS_TO_TICKS(SEND_TELEMETRY_INTERVAL_MS));
   }
 }
@@ -460,22 +576,15 @@ void setup() {
   // shct3 = SHCT3(&Serial2, 1, SERIAL_MODBUS_BAUD);
   delay(1000);
   InitWiFi();
+  tempHumidSensor.begin(); 
+  lightSensor.begin(LIGHT_SENSOR_PIN);
+  // waterPump.begin(WATER_PUMP_PIN);
   
-  // Configure NTP
-  configTime(GMT_OFFSET_SEC, DAYLIGHT_OFFSET_SEC, NTP_SERVER);
-  
-  // Wait for time to be set
-  Serial.println("Waiting for NTP time sync...");
-  time_t now = time(nullptr);
-  while (now < 8 * 3600 * 2) {
-      delay(500);
-      Serial.print(".");
-      now = time(nullptr);
-  }
-  Serial.println();
-  
-  Wire.begin();
-  dht20.begin();
+  // for (uint16_t i = 0; i < 256; ++i) {
+  //   delay(100);
+  //   waterPump.pump(i);
+  // }
+  // waterPump.pump(10);
   
   if (!storage.begin()) {
         Serial.println("Failed to initialize storage!");
