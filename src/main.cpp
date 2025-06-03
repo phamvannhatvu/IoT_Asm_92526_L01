@@ -16,6 +16,7 @@
 #include <esp_now.h>
 #include <Espressif_Updater.h>
 #include "weather_service.h"
+#include "esp_wifi.h"
 
 #define SERIAL1_TX 16
 #define SERIAL1_RX 17
@@ -201,7 +202,9 @@ void setup() {
   tempHumidSensor.begin(); 
   lightSensor.begin(LIGHT_SENSOR_PIN, LED_PIN);
   
-  WiFi.mode(WIFI_STA);  
+  WiFi.mode(WIFI_STA);
+  esp_wifi_set_channel(6, WIFI_SECOND_CHAN_NONE);
+
   // Get and print MAC address
   String mac = WiFi.macAddress();
   Serial.print("ESP32 MAC Address: ");
@@ -216,7 +219,7 @@ void setup() {
 
   esp_now_peer_info_t peerInfo = {};
   memcpy(peerInfo.peer_addr, receiverMAC, 6);
-  peerInfo.channel = 0;
+  peerInfo.channel = 6;
   peerInfo.encrypt = false;
 
   if (esp_now_add_peer(&peerInfo) != ESP_OK) {
