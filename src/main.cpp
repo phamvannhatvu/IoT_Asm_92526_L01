@@ -70,11 +70,6 @@ sensor_node_to_gw_msg dataToSend;
 
 void onDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
   Serial.print("Delivery status: ");
-  // while (status != ESP_NOW_SEND_SUCCESS) {
-  //   esp_now_send(receiverMAC, (uint8_t *)&dataToSend, sizeof(dataToSend));
-  //   Serial.println("ESP-NOW failed, retry...");
-  //   delay(1000);
-  // }
   Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Success" : "Fail");
 }
 typedef struct gw_to_sensor_node_msg {
@@ -161,37 +156,36 @@ void TaskWatering(void *pvParameters) {
 
 void TaskSHTC3Read(void *pvParameters) {
   while(1) {
-    // bool humidityStatus = false;
-    // bool temperatureStatus = false;
-    // float soilHumidity = shtc3.getHumidity(humidityStatus);
-    // float soilTemperature = shtc3.getTemperature(temperatureStatus);
+    bool humidityStatus = false;
+    bool temperatureStatus = false;
+    float soilHumidity = shtc3.getHumidity(humidityStatus);
+    float soilTemperature = shtc3.getTemperature(temperatureStatus);
 
-    // if (humidityStatus == MODBUS_OK) {
-    //   Serial.println("------------------");
-    //   Serial.print("SHTC3 Soil Humidity: ");
-    //   Serial.print(soilHumidity);
-    //   Serial.println("%");
+    if (humidityStatus == MODBUS_OK) {
+      Serial.println("------------------");
+      Serial.print("SHTC3 Soil Humidity: ");
+      Serial.print(soilHumidity);
+      Serial.println("%");
 
-      
-      dataToSend.soil_moisture = 10;
+      dataToSend.soil_moisture = soilHumidity;
       esp_err_t result = esp_now_send(receiverMAC, (uint8_t *)&dataToSend, sizeof(dataToSend));
-    //   if (result != ESP_OK) {
-    //     Serial.println("Error sending the data");
-    //   }
-    // } else {
-    //   Serial.println("------------------");
-    //   Serial.println("Failed to read Soil Humidity from SHTC3 sensor!");
-    // }
+      if (result != ESP_OK) {
+        Serial.println("Error sending the data");
+      }
+    } else {
+      Serial.println("------------------");
+      Serial.println("Failed to read Soil Humidity from SHTC3 sensor!");
+    }
 
-    // if (temperatureStatus == MODBUS_OK) {
-    //   Serial.println("------------------");
-    //   Serial.print("SHTC3 Soil Temperature: ");
-    //   Serial.print(soilTemperature);
-    //   Serial.println(" °C");
-    // } else {
-    //   Serial.println("------------------");
-    //   Serial.println("Failed to read Soil Temperature from SHTC3 sensor!");
-    // }
+    if (temperatureStatus == MODBUS_OK) {
+      Serial.println("------------------");
+      Serial.print("SHTC3 Soil Temperature: ");
+      Serial.print(soilTemperature);
+      Serial.println(" °C");
+    } else {
+      Serial.println("------------------");
+      Serial.println("Failed to read Soil Temperature from SHTC3 sensor!");
+    }
     vTaskDelay(pdMS_TO_TICKS(5000));
   }
 }
@@ -204,7 +198,9 @@ void setup() {
   
   WiFi.mode(WIFI_STA);
   esp_wifi_set_channel(6, WIFI_SECOND_CHAN_NONE);
-
+  esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N);
+  esp_wifi_set_ps(WIFI_PS_NONE);
+  
   // Get and print MAC address
   String mac = WiFi.macAddress();
   Serial.print("ESP32 MAC Address: ");
@@ -229,8 +225,8 @@ void setup() {
   
   // Increase stack sizes and adjust priorities
   xTaskCreate(TaskSHTC3Read, "SHTC3 Read Task", 4096, NULL, 2, NULL);
-  // xTaskCreate(TaskWatering, "Watering task", 4096, NULL, 3, NULL);
-  // xTaskCreate(TaskReadAndSendTelemetryData, "Read and send telemetry data", 2048, NULL, 2, NULL);
+  xTaskCreate(TaskWatering, "Watering task", 4096, NULL, 3, NULL);
+  xTaskCreate(TaskReadAndSendTelemetryData, "Read and send telemetry data", 2048, NULL, 2, NULL);
 }
 
 void loop() {
