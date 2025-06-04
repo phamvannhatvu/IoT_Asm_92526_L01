@@ -18,7 +18,7 @@
 #include "esp_wifi.h"
 #include "weather_service.h"
 
-#define SMARTCONFIG_TIMEOUT 1
+#define SMARTCONFIG_TIMEOUT 30
 
 constexpr char WIFI_SSID[] = "Oreki";
 constexpr char WIFI_PASSWORD[] = "hardware";
@@ -31,7 +31,7 @@ constexpr uint16_t THINGSBOARD_PORT = 1883U;
 
 constexpr uint16_t WIFI_CONNECT_CHECKING_INTERVAL_MS = 10000U;
 constexpr uint16_t TB_CONNECT_CHECKING_INTERVAL_MS = 10000U;
-constexpr uint16_t TB_LOOP_INTERVAL_MS = 10U;
+constexpr uint16_t TB_LOOP_INTERVAL_MS = 100U;
 constexpr uint16_t OTA_UPDATE_INTERVAL_MS = 100U;
 constexpr uint16_t SEND_TELEMETRY_INTERVAL_MS = 5000U;
 constexpr uint32_t SERIAL_DEBUG_BAUD = 9600U;
@@ -88,6 +88,7 @@ void onDataRecv(const uint8_t *mac, const uint8_t *incoming, int len) {
 
 typedef struct gw_to_sensor_node_msg {
   bool watering;
+  bool clearData;
 } gw_to_sensor_node_msg;
 
 gw_to_sensor_node_msg dataToSend;
@@ -97,9 +98,21 @@ void onDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
   Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Success" : "Fail");
 }
 
+constexpr char WEATHER_API_KEY[] = "2feda8f965ede8af1b286418cfe18a5e";  // Replace with your actual OpenWeatherMap API key
+constexpr float LATITUDE = 10.87999801f;
+constexpr float LONGITUDE = 106.80634192f;
+constexpr uint32_t WEATHER_UPDATE_INTERVAL_MS = 300000; // 5 seconds
+WeatherService weatherService(WEATHER_API_KEY, LATITUDE, LONGITUDE);
 void watering(const JsonVariantConst& variant, JsonDocument& document) {
   Serial.println("watering is called");
   dataToSend.watering = true;
+  dataToSend.clearData = false;
+  
+  if (weatherService.getRain() >= 10) {
+    Serial.println("It's currently raining, not watering");
+    dataToSend.watering = false;
+  }
+
   esp_err_t result = esp_now_send(receiverMAC, (uint8_t *)&dataToSend, sizeof(dataToSend));
   if (result != ESP_OK) {
     Serial.println("Error sending the data");
@@ -111,8 +124,24 @@ void watering(const JsonVariantConst& variant, JsonDocument& document) {
   Serial.println(buffer);
 }
 
-const std::array<RPC_Callback, 1U> RPC_CALLBACK = {
-    RPC_Callback{"watering", watering}
+void clearData(const JsonVariantConst& variant, JsonDocument& document) {
+  Serial.println("clearData is called");
+  dataToSend.clearData = true;
+  dataToSend.watering = false;
+  esp_err_t result = esp_now_send(receiverMAC, (uint8_t *)&dataToSend, sizeof(dataToSend));
+  if (result != ESP_OK) {
+    Serial.println("Error sending the data");
+  }
+
+  const size_t jsonSize = Helper::Measure_Json(variant);
+  char buffer[jsonSize];
+  serializeJson(variant, buffer, jsonSize);
+  Serial.println(buffer);
+}
+
+const std::array<RPC_Callback, 2U> RPC_CALLBACK = {
+    RPC_Callback{"watering", watering},
+    RPC_Callback{"clearData", clearData}
 };
 
 // Initalize the Updater client instance used to flash binary to flash memory
@@ -128,7 +157,7 @@ Attribute_Request<2U, MAX_ATTRIBUTES> attr_request;
 // Firmware title and version used to compare with remote version, to check if an update is needed.
 // Title needs to be the same and version needs to be different --> downgrading is possible
 constexpr char CURRENT_FIRMWARE_TITLE[] = "SmartAgriculture";
-constexpr char CURRENT_FIRMWARE_VERSION[] = "1.0";
+constexpr char CURRENT_FIRMWARE_VERSION[] = "1.1";
 // Maximum amount of retries we attempt to download each firmware chunck over MQTT
 constexpr uint8_t FIRMWARE_FAILURE_RETRIES = 12U;
 // Size of each firmware chunck downloaded over MQTT,
@@ -140,7 +169,7 @@ constexpr uint16_t MAX_MESSAGE_SEND_SIZE = 512U;
 constexpr uint16_t MAX_MESSAGE_RECEIVE_SIZE = 512U;
 WiFiClient wifiClient;
 Arduino_MQTT_Client mqttClient(wifiClient);
-Server_Side_RPC<> server_side_rpc;
+Server_Side_RPC<2U, 2U> server_side_rpc;
 const std::array<IAPI_Implementation*, 4U> apis = {
     &shared_update,
     &attr_request,
@@ -370,13 +399,6 @@ void TaskTBloop(void *pvParameters) {
   }
 }
 
-constexpr char WEATHER_API_KEY[] = "2feda8f965ede8af1b286418cfe18a5e";  // Replace with your actual OpenWeatherMap API key
-constexpr float LATITUDE = 10.87999801f;
-constexpr float LONGITUDE = 106.80634192f;
-constexpr uint32_t WEATHER_UPDATE_INTERVAL_MS = 300000; // 5 seconds
-
-WeatherService weatherService(WEATHER_API_KEY, LATITUDE, LONGITUDE);
-
 void TaskWeatherUpdate(void *pvParameters) {
     while(1) {
         if (WiFi.status() == WL_CONNECTED) {
@@ -431,7 +453,7 @@ void setup() {
   esp_now_register_recv_cb(onDataRecv);
   esp_now_peer_info_t peerInfo = {};
   memcpy(peerInfo.peer_addr, receiverMAC, 6);
-  peerInfo.channel = 0;
+  peerInfo.channel = 11;
   peerInfo.encrypt = false;
 
   if (esp_now_add_peer(&peerInfo) != ESP_OK) {
@@ -460,6 +482,7 @@ void setup() {
   xTaskCreate(TaskTBloop, "ThingsBoard loop", 4096, NULL, 3, NULL);
   xTaskCreate(TaskWeatherUpdate, "Weather Update Task", 8192, NULL, 2, NULL);
   xTaskCreate(TaskReadAndSendTelemetryData, "Read and send telemetry data", 2048, NULL, 2, NULL);
+  xTaskCreate(TaskOTAUpdate, "OTA Update", 4096, NULL, 2, NULL);
 }
 
 void loop() {
