@@ -3,79 +3,50 @@
 
 #include <Arduino.h>
 #include <ThingsBoard.h>
+#include "data_storage.h"
 
 #define PUMP_PIN D9
 #define PUMP_POWER_MIN 50
 #define PUMP_POWER_MAX 255
 #define BRAKE_COEFFICIENT 10
-// #include <PubSubClient.h>
-// #include <ArduinoJson.h>
-// #include <scheduler.h>
-
-// Pin Definitions
-// #define SOIL_MOISTURE_PIN     34    // Analog pin for soil moisture sensor
-// #define PUMP_RELAY_PIN       16    // Digital pin for water pump relay
-// #define VALVE_RELAY_PIN      17    // Digital pin for valve relay
-
-// Thresholds
-// #define SOIL_HUMIDITY_TARGET 70.0f // Target soil humidity percentage
-
-// Timing constants
-// #define WATERING_DURATION     10000  // Duration for watering cycle (ms)
-// #define SENSOR_READ_INTERVAL  5000   // Interval between sensor readings (ms)
-// #define PUBLISH_INTERVAL     30000   // Interval for publishing data to ThingsBoard (ms)
+#define WATERING_SAMPLE 3
 
 class WateringSystem {
     private:
-        // Sensors
-        float soilHumidityTarget; // Target soil humidity level
-        float airHumidityTarget;  // Target air humidity level
-        float airTemperatureTarget; // Target air temperature
-        float lightIntensityTarget; // Target light intensity level
-
-        float soilHumidity;      // Current soil humidity level
-        float airHumidity;       // Current air humidity level
-        float airTemperature;    // Current air temperature
-        float lightIntensity;    // Current light intensity
+        float soilHumidityTarget;
+        float soilHumidity;
         
-        // Watering System
-        bool wateringState;         // Current pump state
-        float waterAmout;          // Amount of water dispensed
-        float flowRate;            // Flow rate of the water pump
-
-        // Learning System
+        bool wateringState;
+        float flowRate;
+        
+        // Flow rate tracking
+        unsigned long startTime;
+        float totalFlowRate;
+        int flowRateCount;
+        
+        // PI control coefficients
         uint32_t soilHumidityCoefficient_P;
         uint32_t soilHumidityCoefficient_I;
         float soilHumidityCoefficient_Sum;
-        uint32_t airHumidityCoefficient;
-        uint32_t airTemperatureCoefficient;
-        uint32_t lightIntensityCoefficient;
 
-    
+        // Time-based watering control
+        bool usingHistoricalControl;
+        float targetWateringTime;
+        
+        bool wateringMode = false; // false: automatic, true: manual
 
         void pumpOn(float flowRate);
         void pumpOff();
+        void flowRateControl(float soilHumidity, HumidityGroupStats stats, float& expectedTime);
 
-        void flowRateControl(float soilHumidity, 
-                             float airHumidity, 
-                             float airTemperature, 
-                             float lightIntensity);
     public:
-        // Constructor & Destructor
-        WateringSystem(float soilHumidityTarget, 
-                       float airHumidityTarget, 
-                       float airTemperatureTarget, 
-                       float lightIntensityTarget);
-        // ~WateringSystem();
-
-        void watering(float soilHumidity, 
-                      float airHumidity, 
-                      float airTemperature, 
-                      float lightIntensity);
-
-        void setWateringState(bool state);
-        bool isWatering();
-        float getFlowRate();
+        WateringSystem(float soilHumidityTarget);
+        void watering(float soilHumidity, HumidityGroupStats stats);
+        bool isWatering() const { return wateringState; }
+        bool isUsingHistoricalControl() const { return usingHistoricalControl; }
+        float getFlowRate() const { return flowRate; }
+        float getAverageFlowRate() const;
+        unsigned long getWateringDuration() const;
 };
 
 #endif // WATERING_H
