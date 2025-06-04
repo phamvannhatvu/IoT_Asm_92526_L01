@@ -87,7 +87,7 @@ void onDataRecv(const uint8_t *mac, const uint8_t *incoming, int len) {
 
 #define WATER_PUMP_PIN D9
 #define LIGHT_SENSOR_PIN A3
-#define LED_PIN D7
+#define LED_PIN D8
 
 void TaskReadAndSendTelemetryData(void *pvParameters) {
   while(1) {

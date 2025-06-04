@@ -9,6 +9,8 @@ void LightSensor::begin(uint8_t signalPin, uint8_t ledPin) {
 }
 
 void LightSensor::controlLED() {
+    Serial.print("Brightness: ");
+    Serial.println(analogRead(signalPin));
     if (analogRead(signalPin) < LIGHT_OFF_THRESHOLD) {
         digitalWrite(ledPin, HIGH);
     } else {

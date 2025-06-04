@@ -3,7 +3,7 @@
 
 #include "Arduino.h"
 
-#define LIGHT_OFF_THRESHOLD 2048
+#define LIGHT_OFF_THRESHOLD 1000
 
 class LightSensor {
 private:
