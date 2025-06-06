@@ -1,17 +1,12 @@
 #include <WiFi.h>
 #include <Arduino_MQTT_Client.h>
 #include <ThingsBoard.h>
-#include "temp_humid.h"
-#include "light.h"
-#include "water_pump.h"
 #include <ArduinoOTA.h>
 #include "scheduler.h"
-#include "watering.h"
 #include <Attribute_Request.h>
 #include <OTA_Firmware_Update.h>
 #include <Server_Side_RPC.h>
 #include <Shared_Attribute_Update.h>
-#include "shtc3.h"
 #include <esp_smartconfig.h>
 #include <esp_now.h>
 #include <Espressif_Updater.h>
