@@ -3,7 +3,6 @@
 #include <ThingsBoard.h>
 #include "temp_humid.h"
 #include "light.h"
-#include "water_pump.h"
 #include <ArduinoOTA.h>
 #include "scheduler.h"
 #include "watering.h"
@@ -60,7 +59,6 @@ bool clearDataFlag = false;
 
 TempHumidSensor tempHumidSensor;
 LightSensor  lightSensor;
-WaterPump waterPump;
 uint8_t receiverMAC[] = {0xE8, 0x68, 0xe7, 0x19, 0x27, 0x2c};
 
 typedef struct sensor_node_to_gw_msg {
